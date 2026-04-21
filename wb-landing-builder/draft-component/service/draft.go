@@ -3,202 +3,111 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"math"
 
-	"github.com/rki-mai/wb-landing-builder/draft-service/internal/model"
-	"github.com/rki-mai/wb-landing-builder/draft-service/internal/repository"
-	"go.mongodb.org/mongo-driver/bson/primitive"
-
-	"github.com/wI2L/jsondiff"
+	"github.com/jinzhu/copier"
+	"github.com/rki-mai/wb-landing-builder/draft-component/models"
+	"github.com/rki-mai/wb-landing-builder/draft-component/repository"
+	"go.mongodb.org/mongo-driver/bson"
 )
-
-type DraftService interface {
-	saveDraft(ctx context.Context, projectID int64) error
-	savePatch(ctx context.Context, projectID int64) error
-	GetAsDraft(ctx context.Context, draftID string, version int64) (*model.Draft, error)
-}
-
-type draftService struct {
-	repo     repository.DraftRepository
-	writeSem chan struct{}
-}
-
-func NewDraftService(repo repository.DraftRepository, maxConcurrentWrites int) DraftService {
-	return &draftService{
-		repo:     repo,
-		writeSem: make(chan struct{}, maxConcurrentWrites),
-	}
-}
 
 const (
-	patchEfficiencyThreshold = 0.65
-	FullCopyInterval         = 10
-
-	patchesShrinkThreshold = 20
+	CollapsThreshould = 20
 )
 
-type ElementMeta struct {
-	ID        string
-	IsDeleted bool
+type DraftService struct {
+	repo repository.DraftRepository
 }
 
-func extractMetaFromContent(content []byte) (ElementMeta, error) {
-	var data map[string]json.RawMessage
-	if err := json.Unmarshal(content, &data); err != nil {
-		return ElementMeta{}, err
+func NewDraftService(repo repository.DraftRepository) *DraftService {
+	return &DraftService{
+		repo: repo,
 	}
+}
 
-	for _, rawValue := range data {
-		var innerObj map[string]interface{}
-		if err := json.Unmarshal(rawValue, &innerObj); err != nil {
-			continue
-		}
+func (s *DraftService) mergeBSON(dst, src bson.M) {
+	for key, srcVal := range src {
+		if dstVal, exists := dst[key]; exists {
+			srcMap, srcIsMap := srcVal.(bson.M)
+			dstMap, dstIsMap := dstVal.(bson.M)
 
-		idVal, ok := innerObj["id"]
-		if !ok {
-			continue
-		}
-		idStr, ok := idVal.(string)
-		if !ok {
-			continue
-		}
-
-		isDeleted := false
-		if delVal, ok := innerObj["isDeleted"]; ok {
-			if b, ok := delVal.(bool); ok {
-				isDeleted = b
+			if srcIsMap && dstIsMap {
+				s.mergeBSON(dstMap, srcMap)
+				continue
 			}
 		}
-
-		return ElementMeta{ID: idStr, IsDeleted: isDeleted}, nil
+		dst[key] = srcVal
 	}
-	return ElementMeta{}, fmt.Errorf("no ID found")
 }
 
-func (s *draftService) saveDraft(ctx context.Context, projectID int64) error {
-	drafts, err := s.repo.GetDrafts(ctx, projectID)
-	if err != nil {
-		return fmt.Errorf("failed to get drafts %w", err)
-	}
-	var oldPatches []model.Patch
-	if err := json.Unmarshal(drafts[0].Content, &oldPatches); err != nil {
-		return fmt.Errorf("error parsing content: %w", err)
-	}
-	var lastPatchVersion int64
-	if len(drafts) > 0 {
-		lastPatchVersion = drafts[0].Version
-	}
-	newPatches, err := s.repo.GetPatchesInRange(ctx, projectID, lastPatchVersion+1, lastPatchVersion+patchesShrinkThreshold)
-	if err != nil {
-		return fmt.Errorf("failed to get patches %w", err)
-	}
-	patches := append(oldPatches, newPatches...)
-	seenIDs := make(map[string]bool)
-	uniquePatches := make([]model.Patch, 0)
-	for _, patch := range patches {
-		meta, err := extractMetaFromContent(patch.Content)
+func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, mutation models.Mutation) (int64, error) {
+	mutationToInsert := mutation.Data
+	if mutation.Operation == models.OperationUpdate {
+		latestMutation, err := s.repo.GetLatestMutationForID(ctx, projectID, mutation.Data["id"].(string))
 		if err != nil {
-			continue
+			return 0, err
 		}
-		if meta.IsDeleted {
-			seenIDs[meta.ID] = true
-		}
-		if !seenIDs[meta.ID] {
-			seenIDs[meta.ID] = true
-			uniquePatches = append(uniquePatches, patch)
-		}
+		copier.CopyWithOption(&mutationToInsert, latestMutation, copier.Option{DeepCopy: true})
+		s.mergeBSON(mutationToInsert, mutation.Data)
 	}
-	newContent, err := json.Marshal(uniquePatches)
+	version, err := s.repo.InsertMutation(ctx, projectID, mutationToInsert)
 	if err != nil {
-		return fmt.Errorf("failed to encode json %w", err)
+		return 0, err
 	}
-	s.writeSem <- struct{}{}
-	defer func() { <-s.writeSem }()
-	s.repo.SaveDraft(ctx, &model.Draft{
-		ProjectID: projectID,
-		Content:   newContent,
-		Version:   uniquePatches[len(uniquePatches)-1].Version,
-	})
-	return nil
+	if version%CollapsThreshould == 0 {
+		mutations, err := s.collapseMutations(ctx, projectID, version)
+		if err != nil {
+			return 0, err
+		}
+		s.repo.InsertDraft(ctx, projectID, mutations, version)
+	}
+	return version, nil
 }
 
-// parseDraftID вынесен для чистоты основной функции
-func (s *draftService) parseDraftID(draftID string) (primitive.ObjectID, error) {
-	if draftID == "" {
-		return primitive.NewObjectID(), nil
-	}
-	objectID, err := primitive.ObjectIDFromHex(draftID)
+func (s *DraftService) collapseMutations(ctx context.Context, projectID string, version int64) ([]bson.M, error) {
+	latestDraft, err := s.repo.GetDraft(ctx, projectID, version)
 	if err != nil {
-		return primitive.NilObjectID, fmt.Errorf("invalid draft ID format: %w", err)
+		return nil, err
 	}
-	return objectID, nil
+	prevVersion := latestDraft["version"].(int64) + 1
+	if prevVersion >= version {
+		return latestDraft["mutations"].([]bson.M), nil
+	}
+	mutations, err := s.repo.GetMutationsInRange(ctx, projectID, latestDraft["version"].(int64)+1, version)
+	if err != nil {
+		return nil, err
+	}
+	seenIDs := make(map[string]bool)
+	uniqueMutations := make([]bson.M, 0)
+	for _, mutation := range append(latestDraft["mutations"].([]bson.M), *mutations...) {
+		id := mutation["element_id"].(string)
+		if mutation["deleted"].(bool) {
+			seenIDs[id] = true
+		}
+		if !seenIDs[id] {
+			seenIDs[id] = true
+			uniqueMutations = append(uniqueMutations, mutation)
+		}
+	}
+	return uniqueMutations, nil
 }
 
-// createVersionModel инкапсулирует логику выбора Patch vs Snapshot
-func (s *draftService) createVersionModel(
-	objectID primitive.ObjectID,
-	newVersion int64,
-	latestContent, contentBytes []byte,
-	currentVersion int64,
-) (*model.Version, error) {
-
-	// Условие для принудительного снапшота
-	isSnapshotInterval := currentVersion > 0 && int(currentVersion)%FullCopyInterval == 0
-
-	if isSnapshotInterval {
-		return &model.Version{
-			DraftID:  objectID,
-			Version:  newVersion,
-			Type:     model.VersionTypeSnapshot,
-			Snapshot: contentBytes,
-		}, nil
-	}
-
-	// Попытка создать патч
-	patch, err := jsondiff.CompareJSON(latestContent, contentBytes)
+func (s *DraftService) GetDraft(ctx context.Context, projectID string, version int64) ([]byte, error) {
+	mutations, err := s.collapseMutations(ctx, projectID, version)
 	if err != nil {
-		// Если не удалось сравнить (например, невалидный JSON), лучше сохранить как снапшот, чем упасть с ошибкой,
-		// либо вернуть ошибку, если это критично. В твоем коде была ошибка, оставим её.
-		return nil, fmt.Errorf("failed to create patch between drafts: %w", err)
+		return nil, err
 	}
-
-	// Проверка эффективности патча
-	patchSize := len(patch)
-	contentSize := len(contentBytes)
-
-	// Защита от деления на ноль, хотя contentSize обычно > 0
-	if contentSize == 0 {
-		return &model.Version{
-			DraftID:  objectID,
-			Version:  newVersion,
-			Type:     model.VersionTypeSnapshot,
-			Snapshot: contentBytes,
-		}, nil
+	jsonData, err := json.Marshal(mutations)
+	if err != nil {
+		return nil, err
 	}
-
-	isEfficientPatch := float64(patchSize)/float64(contentSize) < patchEfficiencyThreshold && patchSize > 0
-
-	if isEfficientPatch {
-		return &model.Version{
-			DraftID: objectID,
-			Version: newVersion,
-			Type:    model.VersionTypePatch,
-			Patch:   patch,
-		}, nil
-	}
-
-	return &model.Version{
-		DraftID:  objectID,
-		Version:  newVersion,
-		Type:     model.VersionTypeSnapshot,
-		Snapshot: contentBytes,
-	}, nil
+	return jsonData, nil
 }
 
-func (s *draftService) GetDraft(ctx context.Context, draftID string, version int64) (*model.Draft, error) {
-	objID, err := primitive.ObjectIDFromHex(draftID)
+func (s *DraftService) GetLatestDraft(ctx context.Context, projectID string) ([]byte, error) {
+	jsonData, err := s.GetDraft(ctx, projectID, math.MaxInt64)
 	if err != nil {
-		return nil, fmt.Errorf("invalid draft ID format: %w", err)
+		return nil, err
 	}
-	return s.repo.GetByVersion(ctx, objID, version)
+	return jsonData, nil
 }

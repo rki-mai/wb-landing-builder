@@ -7,9 +7,10 @@ import (
 	"html"
 	"log"
 	"strings"
-	"wb-landing-builder/db"
-	"wb-landing-builder/models"
-	"wb-landing-builder/repository"
+
+	"github.com/rki-mai/wb-landing-builder/db"
+	"github.com/rki-mai/wb-landing-builder/models"
+	"github.com/rki-mai/wb-landing-builder/repository"
 
 	"github.com/gin-gonic/gin"
 )
