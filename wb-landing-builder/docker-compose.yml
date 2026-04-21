@@ -1,0 +1,62 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: landing-mongo
+    restart: always
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodata:/data/db
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok' | grep 1"]
+      interval: 5s
+      timeout: 30s
+      retries: 20
+      start_period: 20s
+
+  mongo-init:
+    image: mongo:7
+    depends_on:
+      mongo:
+        condition: service_started
+    networks:
+      - app-network
+    restart: "no"
+    entrypoint: >
+      bash -lc '
+        until mongosh --host mongo:27017 --quiet --eval "db.adminCommand({ ping: 1 }).ok" | grep 1; do
+          sleep 1
+        done
+        mongosh --host mongo:27017 --quiet --eval "
+          try {
+            rs.status()
+          } catch (e) {
+            rs.initiate({ _id: \"rs0\", members: [{ _id: 0, host: \"mongo:27017\" }] })
+          }
+        "
+      '
+
+  mongo-express:
+    image: mongo-express
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://mongo:27017/?replicaSet=rs0
+      ME_CONFIG_BASICAUTH: false
+    depends_on:
+      mongo-init:
+        condition: service_completed_successfully
+    networks:
+      - app-network
+
+volumes:
+  mongodata:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

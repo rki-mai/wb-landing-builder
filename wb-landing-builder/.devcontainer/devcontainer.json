@@ -1,0 +1,34 @@
+{
+    "name": "Draft Service (Go + Mongo)",
+    "dockerComposeFile": [
+        "../docker-compose.yml",
+        "../docker-compose.dev.yml"
+    ],
+    "service": "draft-service",
+    "workspaceFolder": "/app",
+    // Настройки для VS Code внутри контейнера
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "golang.go",
+                "ms-azuretools.vscode-docker",
+                "mongodb.mongodb-vscode" // Если хочешь видеть базу прямо в VS Code
+            ],
+            "settings": {
+                "go.useLanguageServer": true,
+                "go.gopath": "/go",
+                "go.toolsGopath": "/go-tools",
+                "files.eol": "\n"
+            }
+        }
+    },
+    // Пробрасываем порты для дебага и gRPC
+    "forwardPorts": [
+        50051,
+        2345
+    ],
+    // Команда после создания контейнера
+    "postCreateCommand": "go mod download && go install github.com/go-delve/delve/cmd/dlv@latest",
+    // Пользователь (чтобы не было проблем с правами)
+    "remoteUser": "root"
+}

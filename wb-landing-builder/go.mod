@@ -1,4 +1,4 @@
-module wb-landing-builder
+module github.com/rki-mai/wb-landing-builder
 
 go 1.23.0
 
