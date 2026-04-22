@@ -21,31 +21,52 @@ services:
     image: mongo:7
     depends_on:
       mongo:
-        condition: service_started
+        condition: service_healthy
     networks:
       - app-network
     restart: "no"
     entrypoint: >
-      bash -lc '
+      bash -c '
+        echo "Waiting for MongoDB to be ready..."
         until mongosh --host mongo:27017 --quiet --eval "db.adminCommand({ ping: 1 }).ok" | grep 1; do
           sleep 1
         done
+        echo "MongoDB is ready. Initializing replica set..."
         mongosh --host mongo:27017 --quiet --eval "
           try {
-            rs.status()
+            const status = rs.status();
+            print(\"Replica set already initialized: \" + status.set);
           } catch (e) {
-            rs.initiate({ _id: \"rs0\", members: [{ _id: 0, host: \"mongo:27017\" }] })
+            print(\"Initializing replica set...\");
+            rs.initiate({ _id: \"rs0\", members: [{ _id: 0, host: \"mongo:27017\" }] });
+            print(\"Replica set initialized successfully\");
           }
         "
+        echo "Creating admin user..."
+        mongosh --host mongo:27017 --quiet --eval "
+          db = db.getSiblingDB(\"admin\");
+          if (!db.getUser(\"admin\")) {
+            db.createUser({
+              user: \"admin\",
+              pwd: \"admin\",
+              roles: [{ role: \"root\", db: \"admin\" }]
+            });
+            print(\"Admin user created successfully\");
+          } else {
+            print(\"Admin user already exists\");
+          }
+        "
+        echo "MongoDB initialization complete!"
       '
 
   mongo-express:
-    image: mongo-express
+    image: mongo-express:latest
+    container_name: landing-mongo-express
     restart: always
     ports:
       - "8081:8081"
     environment:
-      ME_CONFIG_MONGODB_URL: mongodb://mongo:27017/?replicaSet=rs0
+      ME_CONFIG_MONGODB_URL: mongodb://admin:admin@mongo:27017/?replicaSet=rs0&authSource=admin
       ME_CONFIG_BASICAUTH: false
     depends_on:
       mongo-init:

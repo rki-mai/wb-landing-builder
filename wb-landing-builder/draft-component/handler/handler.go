@@ -29,6 +29,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 func (h *Handler) applyMutation(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
+
 	if projectID == "" {
 		writeJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
 		return
@@ -53,6 +54,10 @@ func (h *Handler) applyMutation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validateMutationRequest(w, mutation) {
+		return
+	}
+
 	version, err := h.service.ApplyMutation(r.Context(), projectID, mutation)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to apply mutation: "+err.Error())
@@ -60,6 +65,22 @@ func (h *Handler) applyMutation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSONResponse(w, http.StatusOK, map[string]string{"status": "ok", "version": strconv.FormatInt(version, 10)})
+}
+
+func validateMutationRequest(w http.ResponseWriter, mutation models.Mutation) bool {
+	if mutation.Operation != models.OperationCreate &&
+		mutation.Operation != models.OperationUpdate &&
+		mutation.Operation != models.OperationDelete {
+		writeJSONError(w, http.StatusBadRequest, "missing required 'operation' field or its value is invalid")
+		return false
+	}
+
+	if len(mutation.Data) == 0 {
+		writeJSONError(w, http.StatusBadRequest, "missing required 'data' field")
+		return false
+	}
+
+	return true
 }
 
 func (h *Handler) sendLatestPage(w http.ResponseWriter, r *http.Request) {

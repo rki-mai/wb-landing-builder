@@ -3,9 +3,10 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 
-	"github.com/jinzhu/copier"
+	"github.com/mohae/deepcopy"
 	"github.com/rki-mai/wb-landing-builder/draft-component/models"
 	"github.com/rki-mai/wb-landing-builder/draft-component/repository"
 	"go.mongodb.org/mongo-driver/bson"
@@ -19,36 +20,57 @@ type DraftService struct {
 	repo repository.DraftRepository
 }
 
-func NewDraftService(repo repository.DraftRepository) *DraftService {
-	return &DraftService{
+func NewDraftService(repo repository.DraftRepository) DraftService {
+	return DraftService{
 		repo: repo,
 	}
 }
 
-func (s *DraftService) mergeBSON(dst, src bson.M) {
+func (s *DraftService) mergeBSON(dst, src map[string]interface{}) {
 	for key, srcVal := range src {
 		if dstVal, exists := dst[key]; exists {
-			srcMap, srcIsMap := srcVal.(bson.M)
-			dstMap, dstIsMap := dstVal.(bson.M)
+
+			srcMap, srcIsMap := toMap(srcVal)
+			dstMap, dstIsMap := toMap(dstVal)
 
 			if srcIsMap && dstIsMap {
 				s.mergeBSON(dstMap, srcMap)
+				dst[key] = dstMap
 				continue
 			}
 		}
+
 		dst[key] = srcVal
+	}
+}
+
+func toMap(v interface{}) (map[string]interface{}, bool) {
+	switch m := v.(type) {
+	case map[string]interface{}:
+		return m, true
+	case bson.M:
+		return m, true
+	default:
+		return nil, false
 	}
 }
 
 func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, mutation models.Mutation) (int64, error) {
 	mutationToInsert := mutation.Data
+	mutationToInsert["deleted"] = mutation.Operation == models.OperationDelete
 	if mutation.Operation == models.OperationUpdate {
 		latestMutation, err := s.repo.GetLatestMutationForID(ctx, projectID, mutation.Data["id"].(string))
 		if err != nil {
 			return 0, err
 		}
-		copier.CopyWithOption(&mutationToInsert, latestMutation, copier.Option{DeepCopy: true})
-		s.mergeBSON(mutationToInsert, mutation.Data)
+		var ok bool
+		mutationToInsert, ok = deepcopy.Copy(latestMutation).(bson.M)
+		if !ok {
+			return 0, fmt.Errorf("mutation update failed: copy error")
+		}
+		delete(mutationToInsert, "_id")
+		fieldsBson := bson.M(mutation.Data["fields"].(map[string]interface{}))
+		s.mergeBSON(mutationToInsert, fieldsBson)
 	}
 	version, err := s.repo.InsertMutation(ctx, projectID, mutationToInsert)
 	if err != nil {

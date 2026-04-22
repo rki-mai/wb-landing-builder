@@ -12,7 +12,6 @@ import (
 )
 
 type DraftRepository interface {
-	// GetLatestDraft(ctx context.Context, projectID string) (bson.M, error)
 	GetDraft(ctx context.Context, projectID string, version int64) (bson.M, error)
 	InsertDraft(ctx context.Context, projectID string, draft []bson.M, version int64) error
 
@@ -74,21 +73,6 @@ func createIndexes(draftsCollection *mongo.Collection) error {
 func (r *draftRepository) Close(ctx context.Context) error {
 	return r.client.Disconnect(ctx)
 }
-
-// func (r *draftRepository) GetLatestDraft(ctx context.Context, projectID string) (bson.M, error) {
-// 	filter := bson.M{"project_id": projectID}
-// 	opts := options.FindOne().SetSort(bson.D{{Key: "version", Value: -1}})
-
-// 	var draft bson.M
-// 	err := r.draftsCollection.FindOne(ctx, filter, opts).Decode(&draft)
-// 	if err == mongo.ErrNoDocuments {
-// 		return nil, nil
-// 	}
-// 	if err != nil {
-// 		return nil, fmt.Errorf("find latest draft error: %w", err)
-// 	}
-// 	return draft, nil
-// }
 
 func (r *draftRepository) GetDraft(ctx context.Context, projectID string, version int64) (bson.M, error) {
 	filter := bson.M{

@@ -17,6 +17,6 @@ type Draft struct {
 }
 
 type Mutation struct {
-	Operation OperationType
-	Data      bson.M
+	Operation OperationType `json:"operation"`
+	Data      bson.M        `json:"data"`
 }
