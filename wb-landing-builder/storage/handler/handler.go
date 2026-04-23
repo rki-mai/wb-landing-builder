@@ -7,9 +7,12 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"sync"
+	"time"
 
 	"github.com/xeipuuv/gojsonschema"
 
+	"github.com/rki-mai/wb-landing-builder/storage/config"
 	"github.com/rki-mai/wb-landing-builder/storage/models"
 	"github.com/rki-mai/wb-landing-builder/storage/service"
 )
@@ -17,15 +20,107 @@ import (
 const MaxBodySize = 1 << 20
 
 type Handler struct {
-	service      service.DraftService
-	schemaLoader gojsonschema.JSONLoader
+	service     service.DraftService
+	schema      *gojsonschema.Schema
+	rateLimiter *RateLimiter
 }
 
-func NewHandler(svc service.DraftService) *Handler {
-	return &Handler{
-		service:      svc,
-		schemaLoader: gojsonschema.NewReferenceLoader("file:///app/storage/handler/schema.json"),
+type RateLimiter struct {
+	mu            sync.RWMutex
+	requests      map[string][]time.Time
+	limit         int
+	window        time.Duration
+	cleanupTicker *time.Ticker
+}
+
+func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
+	rl := &RateLimiter{
+		requests:      make(map[string][]time.Time),
+		limit:         limit,
+		window:        window,
+		cleanupTicker: time.NewTicker(window),
 	}
+
+	go func() {
+		for range rl.cleanupTicker.C {
+			rl.cleanup()
+		}
+	}()
+
+	return rl
+}
+
+func (rl *RateLimiter) Allow(projectID string) (bool, int, time.Duration) {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	windowStart := now.Add(-rl.window)
+
+	timestamps, exists := rl.requests[projectID]
+	if !exists {
+		rl.requests[projectID] = []time.Time{now}
+		return true, rl.limit - 1, rl.window
+	}
+
+	filtered := make([]time.Time, 0, len(timestamps))
+	for _, ts := range timestamps {
+		if ts.After(windowStart) {
+			filtered = append(filtered, ts)
+		}
+	}
+
+	if len(filtered) >= rl.limit {
+		oldest := filtered[0]
+		retryAfter := rl.window - now.Sub(oldest)
+		return false, 0, retryAfter
+	}
+
+	filtered = append(filtered, now)
+	rl.requests[projectID] = filtered
+	remaining := rl.limit - len(filtered)
+
+	return true, remaining, rl.window - (now.Sub(filtered[0]))
+}
+
+func (rl *RateLimiter) cleanup() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	windowStart := now.Add(-rl.window)
+
+	for projectID, timestamps := range rl.requests {
+		filtered := make([]time.Time, 0, len(timestamps))
+		for _, ts := range timestamps {
+			if ts.After(windowStart) {
+				filtered = append(filtered, ts)
+			}
+		}
+		if len(filtered) == 0 {
+			delete(rl.requests, projectID)
+		} else {
+			rl.requests[projectID] = filtered
+		}
+	}
+}
+
+func (rl *RateLimiter) Stop() {
+	rl.cleanupTicker.Stop()
+}
+
+func NewHandler(svc service.DraftService, cfg *config.Config) (*Handler, error) {
+	schemaLoader := gojsonschema.NewReferenceLoader("file:///app/storage/handler/schema.json")
+	schema, err := gojsonschema.NewSchema(schemaLoader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read schema file: %w", err)
+	}
+
+	return &Handler{
+		service:     svc,
+		schema:      schema,
+		rateLimiter: NewRateLimiter(cfg.RateLimit, time.Minute),
+	}, nil
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -34,11 +129,31 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/storage/{project_id}/versions/{version}", h.sendPage)
 }
 
+func (h *Handler) handleLimit(w http.ResponseWriter, projectID string) bool {
+	allowed, _, retryAfter := h.rateLimiter.Allow(projectID)
+	if !allowed {
+		w.Header().Set("X-RateLimit-Limit", strconv.Itoa(h.rateLimiter.limit))
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(retryAfter).Unix(), 10))
+		w.Header().Set("Retry-After", strconv.FormatInt(int64(retryAfter.Seconds()), 10))
+
+		writeJSONError(w, http.StatusTooManyRequests,
+			fmt.Sprintf("rate limit exceeded. Limit: %d requests per %v. Retry after: %v",
+				h.rateLimiter.limit, h.rateLimiter.window, retryAfter))
+		return false
+	}
+	return true
+}
+
 func (h *Handler) applyMutation(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 
 	if projectID == "" {
 		writeJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
+		return
+	}
+
+	if !h.handleLimit(w, projectID) {
 		return
 	}
 
@@ -56,7 +171,7 @@ func (h *Handler) applyMutation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	documentLoader := gojsonschema.NewBytesLoader(body)
-	result, err := gojsonschema.Validate(h.schemaLoader, documentLoader)
+	result, err := h.schema.Validate(documentLoader)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("failed to perform json validation: %s", err))
 		return

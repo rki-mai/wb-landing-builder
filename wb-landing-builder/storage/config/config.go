@@ -19,6 +19,7 @@ type Config struct {
 	DBConfig     DatabaseConfig
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
+	RateLimit    int
 }
 
 type DatabaseConfig struct {
@@ -28,15 +29,18 @@ type DatabaseConfig struct {
 	Password       string
 	Database       string
 	MaxConnections int
+	TtlDays        int
 }
 
 func Load() *Config {
-	if err := godotenv.Load(); err != nil {
+	if err := godotenv.Load("/app/storage/config/.env"); err != nil {
 		log.Println("No .env file found, using environment variables")
 	}
 
 	dbPort, _ := strconv.Atoi(getEnv("MONGO_PORT", "27017"))
 	maxConnections, _ := strconv.Atoi(getEnv("MONGO_MAX_CONNECTIONS", "100"))
+	ttlDays, _ := strconv.Atoi(getEnv("MONGO_TTL_DAYS", "30"))
+	rateLimit, _ := strconv.Atoi(getEnv("RATE_LIMIT", "100"))
 
 	readTimeout, _ := time.ParseDuration(getEnv("READ_TIMEOUT", "10s"))
 	writeTimeout, _ := time.ParseDuration(getEnv("WRITE_TIMEOUT", "10s"))
@@ -48,13 +52,15 @@ func Load() *Config {
 		APISecret:    getEnv("API_SECRET", "stub"),
 		ReadTimeout:  readTimeout,
 		WriteTimeout: writeTimeout,
+		RateLimit:    rateLimit,
 		DBConfig: DatabaseConfig{
 			Host:           getEnv("MONGO_HOST", "mongo"),
 			Port:           dbPort,
 			User:           getEnv("MONGO_USER", "admin"),
 			Password:       getEnv("MONGO_PASSWORD", "admin"),
-			Database:       getEnv("MONGO_DATABASE", "mongo"),
+			Database:       getEnv("MONGO_DATABASE", "storage"),
 			MaxConnections: maxConnections,
+			TtlDays:        ttlDays,
 		},
 	}
 }

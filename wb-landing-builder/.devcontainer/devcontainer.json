@@ -22,8 +22,8 @@
         }
     },
     "forwardPorts": [
-        50051,
-        2345
+        27017,
+        8081
     ],
     "postCreateCommand": "go mod download && go install github.com/go-delve/delve/cmd/dlv@latest",
     "remoteUser": "root"

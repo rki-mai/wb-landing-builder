@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -24,12 +25,15 @@ func main() {
 
 	log.Print(cfg.GetMongoURI(), " ", cfg.DBConfig.Database)
 
-	repository, err := repository.NewDraftRepository(cfg.GetMongoURI(), cfg.DBConfig.Database)
+	repository, err := repository.NewDraftRepository(cfg.GetMongoURI(), cfg.DBConfig.Database, cfg.DBConfig.TtlDays)
 	if err != nil {
 		log.Fatalf("Failed to connect to db: %v", err)
 	}
 
-	handler := handler.NewHandler(service.NewDraftService(repository, cfg))
+	handler, err := handler.NewHandler(service.NewDraftService(repository, cfg), cfg)
+	if err != nil {
+		fmt.Printf("handler creation failed: %v", err)
+	}
 
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)

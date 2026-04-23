@@ -29,7 +29,7 @@ type draftRepository struct {
 	client              *mongo.Client
 }
 
-func NewDraftRepository(uri string, dbName string) (DraftRepository, error) {
+func NewDraftRepository(uri string, dbName string, ttlDays int) (DraftRepository, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -55,7 +55,7 @@ func NewDraftRepository(uri string, dbName string) (DraftRepository, error) {
 		client:              client,
 	}
 
-	if err = createIndexes(repo.draftsCollection); err != nil {
+	if err = createIndexes(repo.draftsCollection, repo.mutationsCollection, ttlDays); err != nil {
 		return nil, fmt.Errorf("mongo index create error: %w", err)
 	}
 
@@ -63,11 +63,45 @@ func NewDraftRepository(uri string, dbName string) (DraftRepository, error) {
 	return repo, nil
 }
 
-func createIndexes(draftsCollection *mongo.Collection) error {
+func createIndexes(draftsCollection, mutationsCollection *mongo.Collection, ttlDays int) error {
 	_, err := draftsCollection.Indexes().CreateOne(context.Background(), mongo.IndexModel{
 		Keys: bson.D{{Key: "project_id", Value: 1}, {Key: "version", Value: 1}},
 	})
-	return err
+	if err != nil {
+		return err
+	}
+
+	_, err = draftsCollection.Indexes().CreateOne(context.Background(), mongo.IndexModel{
+		Keys:    bson.D{{Key: "created_at", Value: 1}},
+		Options: options.Index().SetExpireAfterSeconds(int32(ttlDays * 24 * 3600)),
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = mutationsCollection.Indexes().CreateOne(context.Background(), mongo.IndexModel{
+		Keys: bson.D{{Key: "project_id", Value: 1}, {Key: "version", Value: 1}},
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = mutationsCollection.Indexes().CreateOne(context.Background(), mongo.IndexModel{
+		Keys: bson.D{{Key: "project_id", Value: 1}, {Key: "id", Value: 1}, {Key: "created_at", Value: -1}},
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = mutationsCollection.Indexes().CreateOne(context.Background(), mongo.IndexModel{
+		Keys:    bson.D{{Key: "created_at", Value: 1}},
+		Options: options.Index().SetExpireAfterSeconds(int32(ttlDays * 24 * 3600)),
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (r *draftRepository) Close(ctx context.Context) error {
