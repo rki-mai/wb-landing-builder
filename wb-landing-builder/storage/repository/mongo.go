@@ -119,7 +119,7 @@ func (r *draftRepository) GetDraft(ctx context.Context, projectID string, versio
 	var draft bson.M
 	err := r.draftsCollection.FindOne(ctx, filter, opts).Decode(&draft)
 	if err == mongo.ErrNoDocuments {
-		return bson.M{"version": 0, "mutations": []bson.M{}}, nil
+		return bson.M{"version": 0, "mutations": bson.A{}}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find draft error: %w", err)

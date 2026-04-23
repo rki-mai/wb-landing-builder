@@ -30,6 +30,12 @@ func NewDraftService(repo repository.DraftRepository, cfg *config.Config) DraftS
 }
 
 func (s *DraftService) mergeBSON(dst, src map[string]interface{}) {
+	if dst == nil {
+		dst = make(map[string]interface{})
+	}
+	if src == nil {
+		return
+	}
 	for key, srcVal := range src {
 		if dstVal, exists := dst[key]; exists {
 
@@ -91,14 +97,30 @@ func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, muta
 	return version, nil
 }
 
+func toBSONMArraySafe(arr bson.A) []bson.M {
+	result := make([]bson.M, 0, len(arr))
+	for _, v := range arr {
+		if m, ok := v.(bson.M); ok {
+			result = append(result, m)
+		}
+	}
+	return result
+}
+
 func (s *DraftService) collapseMutations(ctx context.Context, projectID string, version int) ([]bson.M, error) {
 	latestDraft, err := s.repo.GetDraft(ctx, projectID, version)
 	if err != nil {
 		return nil, err
 	}
-	fromVersion := latestDraft["version"].(int)
+	var fromVersion int
+	if m, ok := latestDraft["version"].(int32); ok {
+		fromVersion = int(m)
+	} else {
+		fromVersion = latestDraft["version"].(int)
+	}
+	draftMutations := toBSONMArraySafe(latestDraft["mutations"].(bson.A))
 	if fromVersion == version {
-		return latestDraft["mutations"].([]bson.M), nil
+		return draftMutations, nil
 	}
 	mutations, err := s.repo.GetMutationsInRange(ctx, projectID, fromVersion+1, version)
 	if err != nil {
@@ -106,7 +128,7 @@ func (s *DraftService) collapseMutations(ctx context.Context, projectID string, 
 	}
 	seenIDs := make(map[string]bool)
 	uniqueMutations := make([]bson.M, 0)
-	combined := append(latestDraft["mutations"].([]bson.M), *mutations...)
+	combined := append(draftMutations, *mutations...)
 	for i := len(combined) - 1; i >= 0; i-- {
 		mutation := combined[i]
 		id := mutation["id"].(string)

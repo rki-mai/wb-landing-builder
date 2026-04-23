@@ -353,11 +353,11 @@ def main():
     parser.add_argument("--url", default="http://localhost:8080", help="Базовый URL API")
     parser.add_argument("--endpoint", default="/api/v1/storage/testID/mutations", help="Endpoint API")
     parser.add_argument("--users", type=int, default=10, help="Количество одновременных пользователей")
-    parser.add_argument("--requests", type=int, default=50, help="Общее количество запросов")
+    parser.add_argument("--requests", type=int, default=5000, help="Общее количество запросов")
     parser.add_argument("--create-ratio", type=float, default=0.4, help="Вероятность создания элемента")
     parser.add_argument("--update-ratio", type=float, default=0.4, help="Вероятность обновления элемента")
     parser.add_argument("--delete-ratio", type=float, default=0.2, help="Вероятность удаления элемента")
-    parser.add_argument("--step-delay", type=float, default=0.001, 
+    parser.add_argument("--step-delay", type=float, default=0, 
                        help="Задержка между запусками запросов в секундах (0 - лавинообразно, >0 - с шагом)")
     
     args = parser.parse_args()
