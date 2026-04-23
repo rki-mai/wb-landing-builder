@@ -3,28 +3,35 @@ package handler
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strconv"
 
-	"github.com/rki-mai/wb-landing-builder/draft-component/models"
-	"github.com/rki-mai/wb-landing-builder/draft-component/service"
+	"github.com/xeipuuv/gojsonschema"
+
+	"github.com/rki-mai/wb-landing-builder/storage/models"
+	"github.com/rki-mai/wb-landing-builder/storage/service"
 )
 
 const MaxBodySize = 1 << 20
 
 type Handler struct {
-	service service.DraftService
+	service      service.DraftService
+	schemaLoader gojsonschema.JSONLoader
 }
 
 func NewHandler(svc service.DraftService) *Handler {
-	return &Handler{service: svc}
+	return &Handler{
+		service:      svc,
+		schemaLoader: gojsonschema.NewReferenceLoader("file:///app/storage/handler/schema.json"),
+	}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/v1/drafts/{project_id}/mutations", h.applyMutation)
-	mux.HandleFunc("GET /api/v1/drafts/{project_id}", h.sendLatestPage)
-	mux.HandleFunc("GET /api/v1/drafts/{project_id}/versions/{version}", h.sendPage)
+	mux.HandleFunc("POST /api/v1/storage/{project_id}/mutations", h.applyMutation)
+	mux.HandleFunc("GET /api/v1/storage/{project_id}", h.sendLatestPage)
+	mux.HandleFunc("GET /api/v1/storage/{project_id}/versions/{version}", h.sendPage)
 }
 
 func (h *Handler) applyMutation(w http.ResponseWriter, r *http.Request) {
@@ -48,13 +55,25 @@ func (h *Handler) applyMutation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var mutation models.Mutation
-	if err := json.Unmarshal(body, &mutation); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid mutation payload: "+err.Error())
+	documentLoader := gojsonschema.NewBytesLoader(body)
+	result, err := gojsonschema.Validate(h.schemaLoader, documentLoader)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("failed to perform json validation: %s", err))
 		return
 	}
 
-	if !validateMutationRequest(w, mutation) {
+	if !result.Valid() {
+		output := "json does not match schema. Errors:\n"
+		for i, desc := range result.Errors() {
+			output += fmt.Sprintf("\t%d: %s\n", i+1, desc)
+		}
+		writeJSONError(w, http.StatusBadRequest, output)
+		return
+	}
+
+	var mutation models.Mutation
+	if err := json.Unmarshal(body, &mutation); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid mutation payload: "+err.Error())
 		return
 	}
 
@@ -64,23 +83,7 @@ func (h *Handler) applyMutation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSONResponse(w, http.StatusOK, map[string]string{"status": "ok", "version": strconv.FormatInt(version, 10)})
-}
-
-func validateMutationRequest(w http.ResponseWriter, mutation models.Mutation) bool {
-	if mutation.Operation != models.OperationCreate &&
-		mutation.Operation != models.OperationUpdate &&
-		mutation.Operation != models.OperationDelete {
-		writeJSONError(w, http.StatusBadRequest, "missing required 'operation' field or its value is invalid")
-		return false
-	}
-
-	if len(mutation.Data) == 0 {
-		writeJSONError(w, http.StatusBadRequest, "missing required 'data' field")
-		return false
-	}
-
-	return true
+	writeJSONResponse(w, http.StatusOK, map[string]string{"status": "ok", "version": strconv.FormatInt(int64(version), 10)})
 }
 
 func (h *Handler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
@@ -101,7 +104,7 @@ func (h *Handler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) sendPage(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
-	version, err := strconv.ParseInt(r.PathValue("version"), 10, 64)
+	version, err := strconv.Atoi(r.PathValue("version"))
 
 	if projectID == "" {
 		writeJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
@@ -128,7 +131,12 @@ func writeJSONError(w http.ResponseWriter, status int, message string) {
 func writeJSONResponse(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+	switch v := data.(type) {
+	case []byte:
+		w.Write(v)
+	default:
+		if err := json.NewEncoder(w).Encode(data); err != nil {
+			http.Error(w, "failed to encode response", http.StatusInternalServerError)
+		}
 	}
 }

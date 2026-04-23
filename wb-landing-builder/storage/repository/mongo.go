@@ -12,13 +12,13 @@ import (
 )
 
 type DraftRepository interface {
-	GetDraft(ctx context.Context, projectID string, version int64) (bson.M, error)
-	InsertDraft(ctx context.Context, projectID string, draft []bson.M, version int64) error
+	GetDraft(ctx context.Context, projectID string, version int) (bson.M, error)
+	InsertDraft(ctx context.Context, projectID string, draft []bson.M, version int) error
 
 	GetLatestMutationForID(ctx context.Context, projectID string, elementID string) (bson.M, error)
-	GetLatestMutationVersion(ctx context.Context, projectID string) (int64, error)
-	GetMutationsInRange(ctx context.Context, projectID string, from int64, to int64) (*[]bson.M, error)
-	InsertMutation(ctx context.Context, projectID string, mutation bson.M) (int64, error)
+	GetLatestMutationVersion(ctx context.Context, projectID string) (int, error)
+	GetMutationsInRange(ctx context.Context, projectID string, from int, to int) (*[]bson.M, error)
+	InsertMutation(ctx context.Context, projectID string, mutation bson.M) (int, error)
 
 	Close(ctx context.Context) error
 }
@@ -74,7 +74,7 @@ func (r *draftRepository) Close(ctx context.Context) error {
 	return r.client.Disconnect(ctx)
 }
 
-func (r *draftRepository) GetDraft(ctx context.Context, projectID string, version int64) (bson.M, error) {
+func (r *draftRepository) GetDraft(ctx context.Context, projectID string, version int) (bson.M, error) {
 	filter := bson.M{
 		"project_id": projectID,
 		"version":    bson.M{"$lte": version},
@@ -85,7 +85,7 @@ func (r *draftRepository) GetDraft(ctx context.Context, projectID string, versio
 	var draft bson.M
 	err := r.draftsCollection.FindOne(ctx, filter, opts).Decode(&draft)
 	if err == mongo.ErrNoDocuments {
-		return bson.M{"version": 0}, nil
+		return bson.M{"version": 0, "mutations": []bson.M{}}, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("find draft error: %w", err)
@@ -93,7 +93,7 @@ func (r *draftRepository) GetDraft(ctx context.Context, projectID string, versio
 	return draft, nil
 }
 
-func (r *draftRepository) InsertDraft(ctx context.Context, projectID string, mutations []bson.M, version int64) error {
+func (r *draftRepository) InsertDraft(ctx context.Context, projectID string, mutations []bson.M, version int) error {
 	draft := bson.M{
 		"project_id": projectID,
 		"version":    version,
@@ -126,12 +126,12 @@ func (r *draftRepository) GetLatestMutationForID(ctx context.Context, projectID 
 	return mutation, nil
 }
 
-func (r *draftRepository) GetLatestMutationVersion(ctx context.Context, projectID string) (int64, error) {
+func (r *draftRepository) GetLatestMutationVersion(ctx context.Context, projectID string) (int, error) {
 	filter := bson.M{"project_id": projectID}
 	opts := options.FindOne().SetSort(bson.D{{Key: "version", Value: -1}})
 
 	var result struct {
-		Version int64 `bson:"version"`
+		Version int `bson:"version"`
 	}
 
 	err := r.mutationsCollection.FindOne(ctx, filter, opts).Decode(&result)
@@ -145,7 +145,7 @@ func (r *draftRepository) GetLatestMutationVersion(ctx context.Context, projectI
 	return result.Version, nil
 }
 
-func (r *draftRepository) GetMutationsInRange(ctx context.Context, projectID string, from int64, to int64) (*[]bson.M, error) {
+func (r *draftRepository) GetMutationsInRange(ctx context.Context, projectID string, from int, to int) (*[]bson.M, error) {
 	filter := bson.M{
 		"project_id": projectID,
 		"version": bson.M{
@@ -156,7 +156,7 @@ func (r *draftRepository) GetMutationsInRange(ctx context.Context, projectID str
 
 	opts := options.Find().
 		SetSort(bson.D{{Key: "version", Value: 1}}).
-		SetLimit(to - from + 1)
+		SetLimit(int64(to - from + 1))
 
 	cursor, err := r.mutationsCollection.Find(ctx, filter, opts)
 	if err != nil {
@@ -172,7 +172,7 @@ func (r *draftRepository) GetMutationsInRange(ctx context.Context, projectID str
 	return &mutations, nil
 }
 
-func (r *draftRepository) InsertMutation(ctx context.Context, projectID string, mutation bson.M) (int64, error) {
+func (r *draftRepository) InsertMutation(ctx context.Context, projectID string, mutation bson.M) (int, error) {
 	latestVersion, err := r.GetLatestMutationVersion(ctx, projectID)
 	if err != nil {
 		return 0, err

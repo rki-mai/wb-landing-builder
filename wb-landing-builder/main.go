@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/rki-mai/wb-landing-builder/draft-component/config"
-	"github.com/rki-mai/wb-landing-builder/draft-component/handler"
-	"github.com/rki-mai/wb-landing-builder/draft-component/repository"
-	"github.com/rki-mai/wb-landing-builder/draft-component/service"
+	"github.com/rki-mai/wb-landing-builder/storage/config"
+	"github.com/rki-mai/wb-landing-builder/storage/handler"
+	"github.com/rki-mai/wb-landing-builder/storage/repository"
+	"github.com/rki-mai/wb-landing-builder/storage/service"
 )
 
 func main() {
@@ -29,7 +29,7 @@ func main() {
 		log.Fatalf("Failed to connect to db: %v", err)
 	}
 
-	handler := handler.NewHandler(service.NewDraftService(repository))
+	handler := handler.NewHandler(service.NewDraftService(repository, cfg))
 
 	mux := http.NewServeMux()
 	handler.RegisterRoutes(mux)

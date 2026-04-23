@@ -7,8 +7,9 @@ import (
 	"math"
 
 	"github.com/mohae/deepcopy"
-	"github.com/rki-mai/wb-landing-builder/draft-component/models"
-	"github.com/rki-mai/wb-landing-builder/draft-component/repository"
+	"github.com/rki-mai/wb-landing-builder/storage/config"
+	"github.com/rki-mai/wb-landing-builder/storage/models"
+	"github.com/rki-mai/wb-landing-builder/storage/repository"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -17,12 +18,14 @@ const (
 )
 
 type DraftService struct {
-	repo repository.DraftRepository
+	repo      repository.DraftRepository
+	semaphore chan struct{}
 }
 
-func NewDraftService(repo repository.DraftRepository) DraftService {
+func NewDraftService(repo repository.DraftRepository, cfg *config.Config) DraftService {
 	return DraftService{
-		repo: repo,
+		repo:      repo,
+		semaphore: make(chan struct{}, cfg.DBConfig.MaxConnections),
 	}
 }
 
@@ -55,7 +58,9 @@ func toMap(v interface{}) (map[string]interface{}, bool) {
 	}
 }
 
-func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, mutation models.Mutation) (int64, error) {
+func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, mutation models.Mutation) (int, error) {
+	s.semaphore <- struct{}{}
+	defer func() { <-s.semaphore }()
 	mutationToInsert := mutation.Data
 	mutationToInsert["deleted"] = mutation.Operation == models.OperationDelete
 	if mutation.Operation == models.OperationUpdate {
@@ -86,23 +91,25 @@ func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, muta
 	return version, nil
 }
 
-func (s *DraftService) collapseMutations(ctx context.Context, projectID string, version int64) ([]bson.M, error) {
+func (s *DraftService) collapseMutations(ctx context.Context, projectID string, version int) ([]bson.M, error) {
 	latestDraft, err := s.repo.GetDraft(ctx, projectID, version)
 	if err != nil {
 		return nil, err
 	}
-	prevVersion := latestDraft["version"].(int64) + 1
-	if prevVersion >= version {
+	fromVersion := latestDraft["version"].(int)
+	if fromVersion == version {
 		return latestDraft["mutations"].([]bson.M), nil
 	}
-	mutations, err := s.repo.GetMutationsInRange(ctx, projectID, latestDraft["version"].(int64)+1, version)
+	mutations, err := s.repo.GetMutationsInRange(ctx, projectID, fromVersion+1, version)
 	if err != nil {
 		return nil, err
 	}
 	seenIDs := make(map[string]bool)
 	uniqueMutations := make([]bson.M, 0)
-	for _, mutation := range append(latestDraft["mutations"].([]bson.M), *mutations...) {
-		id := mutation["element_id"].(string)
+	combined := append(latestDraft["mutations"].([]bson.M), *mutations...)
+	for i := len(combined) - 1; i >= 0; i-- {
+		mutation := combined[i]
+		id := mutation["id"].(string)
 		if mutation["deleted"].(bool) {
 			seenIDs[id] = true
 		}
@@ -114,7 +121,9 @@ func (s *DraftService) collapseMutations(ctx context.Context, projectID string, 
 	return uniqueMutations, nil
 }
 
-func (s *DraftService) GetDraft(ctx context.Context, projectID string, version int64) ([]byte, error) {
+func (s *DraftService) GetDraft(ctx context.Context, projectID string, version int) ([]byte, error) {
+	s.semaphore <- struct{}{}
+	defer func() { <-s.semaphore }()
 	mutations, err := s.collapseMutations(ctx, projectID, version)
 	if err != nil {
 		return nil, err
@@ -127,7 +136,7 @@ func (s *DraftService) GetDraft(ctx context.Context, projectID string, version i
 }
 
 func (s *DraftService) GetLatestDraft(ctx context.Context, projectID string) ([]byte, error) {
-	jsonData, err := s.GetDraft(ctx, projectID, math.MaxInt64)
+	jsonData, err := s.GetDraft(ctx, projectID, math.MaxInt)
 	if err != nil {
 		return nil, err
 	}
