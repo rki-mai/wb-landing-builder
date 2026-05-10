@@ -4,8 +4,9 @@ package repository
 import (
 	"context"
 	"log"
-	"wb-landing-builder/db"
-	"wb-landing-builder/models"
+
+	"github.com/rki-mai/wb-landing-builder/db"
+	"github.com/rki-mai/wb-landing-builder/models"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
