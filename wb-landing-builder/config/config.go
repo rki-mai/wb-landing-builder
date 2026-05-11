@@ -17,9 +17,9 @@ type Config struct {
 	LogLevel    string
 	APISecret   string
 
-	JWTSecret            string
-	JWTExpiration        time.Duration
-	JWTRefreshExpiration time.Duration
+	JWTSecret              string
+	JWTExpiration          time.Duration
+	RefreshTokenExpiration time.Duration
 
 	DBConfig     DatabaseConfig
 	ReadTimeout  time.Duration
@@ -51,19 +51,19 @@ func Load() *Config {
 	writeTimeout, _ := time.ParseDuration(getEnv("WRITE_TIMEOUT", "10s"))
 
 	jwtExpiration, _ := time.ParseDuration(getEnv("JWT_EXPIRATION", "15m"))
-	jwtRefreshExpiration, _ := time.ParseDuration(getEnv("JWT_REFRESH_EXPIRATION", "168h"))
+	refreshTokenExpiration, _ := time.ParseDuration(getEnv("REFRESH_TOKEN_EXPIRATION", "168h"))
 
 	return &Config{
-		Port:                 getEnv("PORT", "8080"),
-		Environment:          getEnv("ENVIRONMENT", "production"),
-		LogLevel:             getEnv("LOG_LEVEL", "info"),
-		APISecret:            getEnv("API_SECRET", "stub"),
-		JWTSecret:            getEnv("JWT_SECRET", "dev-secret"),
-		JWTExpiration:        jwtExpiration,
-		JWTRefreshExpiration: jwtRefreshExpiration,
-		ReadTimeout:          readTimeout,
-		WriteTimeout:         writeTimeout,
-		RateLimit:            rateLimit,
+		Port:                   getEnv("PORT", "8080"),
+		Environment:            getEnv("ENVIRONMENT", "production"),
+		LogLevel:               getEnv("LOG_LEVEL", "info"),
+		APISecret:              getEnv("API_SECRET", "stub"),
+		JWTSecret:              getEnv("JWT_SECRET", "dev-secret"),
+		JWTExpiration:          jwtExpiration,
+		RefreshTokenExpiration: refreshTokenExpiration,
+		ReadTimeout:            readTimeout,
+		WriteTimeout:           writeTimeout,
+		RateLimit:              rateLimit,
 		DBConfig: DatabaseConfig{
 			Host:           getEnv("MONGO_HOST", "mongo"),
 			Port:           dbPort,
