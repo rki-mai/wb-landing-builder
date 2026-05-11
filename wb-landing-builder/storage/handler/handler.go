@@ -123,10 +123,22 @@ func NewHandler(svc service.DraftService, cfg *config.Config) (*Handler, error) 
 	}, nil
 }
 
-func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/v1/storage/{project_id}/mutations", h.applyMutation)
-	mux.HandleFunc("GET /api/v1/storage/{project_id}", h.sendLatestPage)
-	mux.HandleFunc("GET /api/v1/storage/{project_id}/versions/{version}", h.sendPage)
+func (h *Handler) RegisterRoutes(
+	mux *http.ServeMux,
+	middleware func(http.Handler) http.Handler,
+) {
+	mux.Handle(
+		"POST /api/v1/storage/{project_id}/mutations",
+		middleware(http.HandlerFunc(h.applyMutation)),
+	)
+	mux.Handle(
+		"GET /api/v1/storage/{project_id}",
+		middleware(http.HandlerFunc(h.sendLatestPage)),
+	)
+	mux.Handle(
+		"GET /api/v1/storage/{project_id}/versions/{version}",
+		middleware(http.HandlerFunc(h.sendPage)),
+	)
 }
 
 func (h *Handler) handleLimit(w http.ResponseWriter, projectID string) bool {
