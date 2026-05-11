@@ -73,7 +73,8 @@ func createIndexes(r *authRepository) error {
 	}
 
 	_, err = r.refreshTokensCollection.Indexes().CreateOne(context.Background(), mongo.IndexModel{
-		Keys: bson.D{{Key: "token", Value: 1}},
+		Keys:    bson.D{{Key: "token", Value: 1}},
+		Options: options.Index().SetUnique(true),
 	})
 	if err != nil {
 		return err

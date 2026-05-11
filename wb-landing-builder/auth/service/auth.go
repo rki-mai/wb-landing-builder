@@ -14,31 +14,26 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-type AuthService interface {
-	Register(ctx context.Context, email, password string) (*models.User, error)
-	Login(ctx context.Context, email, password string) (*models.TokenResponse, error)
-	Refresh(ctx context.Context, refreshToken string) (*models.TokenResponse, error)
-	GetUserFromToken(token string) (string, error)
-	GetUserByID(ctx context.Context, id string) (*models.User, error)
-}
-
-type authService struct {
+type AuthService struct {
 	repo       repository.AuthRepository
 	jwtSecret  string
 	accessTTL  time.Duration
 	refreshTTL time.Duration
 }
 
-func NewAuthService(repo repository.AuthRepository, cfg *config.Config) AuthService {
-	return &authService{
+func NewAuthService(
+	repo repository.AuthRepository,
+	cfg *config.Config,
+) *AuthService {
+	return &AuthService{
 		repo:       repo,
-		jwtSecret:  cfg.APISecret,
-		accessTTL:  15 * time.Minute,
-		refreshTTL: 24 * time.Hour * 7,
+		jwtSecret:  cfg.JWTSecret,
+		accessTTL:  cfg.JWTExpiration,
+		refreshTTL: cfg.RefreshTokenExpiration,
 	}
 }
 
-func (s *authService) Register(ctx context.Context, email, password string) (*models.User, error) {
+func (s *AuthService) Register(ctx context.Context, email, password string) (*models.User, error) {
 	existing, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
 		return nil, err
@@ -66,7 +61,7 @@ func (s *authService) Register(ctx context.Context, email, password string) (*mo
 	return user, nil
 }
 
-func (s *authService) Login(ctx context.Context, email, password string) (*models.TokenResponse, error) {
+func (s *AuthService) Login(ctx context.Context, email, password string) (*models.TokenResponse, error) {
 	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil || user == nil {
 		return nil, errors.New("invalid credentials")
@@ -79,7 +74,7 @@ func (s *authService) Login(ctx context.Context, email, password string) (*model
 	return s.generateTokens(ctx, user.ID)
 }
 
-func (s *authService) Refresh(ctx context.Context, refreshToken string) (*models.TokenResponse, error) {
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*models.TokenResponse, error) {
 	stored, err := s.repo.GetRefreshToken(ctx, refreshToken)
 	if err != nil || stored == nil {
 		return nil, errors.New("invalid refresh token")
@@ -89,15 +84,16 @@ func (s *authService) Refresh(ctx context.Context, refreshToken string) (*models
 		return nil, errors.New("refresh token expired")
 	}
 
-	_ = s.repo.DeleteRefreshToken(ctx, refreshToken)
+	if err := s.repo.DeleteRefreshToken(ctx, refreshToken); err != nil {
+		return nil, err
+	}
 
 	return s.generateTokens(ctx, stored.UserID)
 }
 
-func (s *authService) generateTokens(ctx context.Context, userID string) (*models.TokenResponse, error) {
+func (s *AuthService) generateTokens(ctx context.Context, userID string) (*models.TokenResponse, error) {
 	now := time.Now()
 
-	// Access token
 	claims := models.Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -133,10 +129,19 @@ func (s *authService) generateTokens(ctx context.Context, userID string) (*model
 	}, nil
 }
 
-func (s *authService) GetUserFromToken(tokenStr string) (string, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &models.Claims{}, func(token *jwt.Token) (interface{}, error) {
-		return []byte(s.jwtSecret), nil
-	})
+func (s *AuthService) GetUserFromToken(tokenStr string) (string, error) {
+	token, err := jwt.ParseWithClaims(
+		tokenStr,
+		&models.Claims{},
+		func(token *jwt.Token) (interface{}, error) {
+
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, errors.New("unexpected signing method")
+			}
+
+			return []byte(s.jwtSecret), nil
+		},
+	)
 
 	if err != nil || !token.Valid {
 		return "", errors.New("invalid token")
@@ -150,7 +155,7 @@ func (s *authService) GetUserFromToken(tokenStr string) (string, error) {
 	return claims.UserID, nil
 }
 
-func (s *authService) GetUserByID(ctx context.Context, id string) (*models.User, error) {
+func (s *AuthService) GetUserByID(ctx context.Context, id string) (*models.User, error) {
 	user, err := s.repo.GetUserByID(ctx, id)
 	if err != nil {
 		return nil, err

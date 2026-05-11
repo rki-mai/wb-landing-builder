@@ -4,24 +4,25 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/rki-mai/wb-landing-builder/auth/middleware"
 	"github.com/rki-mai/wb-landing-builder/auth/models"
 	"github.com/rki-mai/wb-landing-builder/auth/service"
 )
 
 type Handler struct {
-	service service.AuthService
+	service *service.AuthService
 }
 
-func NewHandler(svc service.AuthService) *Handler {
+func NewHandler(svc *service.AuthService) *Handler {
 	return &Handler{service: svc}
 }
 
-func (h *Handler) RegisterRoutes(mux *http.ServeMux, authMiddleware func(http.Handler) http.Handler) {
+func (h *Handler) RegisterRoutes(mux *http.ServeMux, middleware func(http.Handler) http.Handler) {
 	mux.HandleFunc("POST /api/v1/auth/register", h.register)
 	mux.HandleFunc("POST /api/v1/auth/login", h.login)
 	mux.HandleFunc("POST /api/v1/auth/refresh", h.refresh)
 
-	mux.Handle("GET /api/v1/auth/me", authMiddleware(http.HandlerFunc(h.me)))
+	mux.Handle("GET /api/v1/auth/me", middleware(http.HandlerFunc(h.me)))
 }
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
@@ -70,12 +71,8 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(w, http.StatusOK, tokens)
 }
 
-type refreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
 func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
-	var req refreshRequest
+	var req models.RefreshRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid request body")
@@ -97,7 +94,7 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value("user_id").(string)
+	userID, ok := r.Context().Value(middleware.UserIDKey).(string)
 	if !ok {
 		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 		return

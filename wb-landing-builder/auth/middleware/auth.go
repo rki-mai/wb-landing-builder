@@ -12,7 +12,9 @@ type contextKey string
 
 const UserIDKey contextKey = "user_id"
 
-func AuthMiddleware(authService service.AuthService) func(http.Handler) http.Handler {
+func AuthMiddleware(
+	authService *service.AuthService,
+) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -22,8 +24,8 @@ func AuthMiddleware(authService service.AuthService) func(http.Handler) http.Han
 				return
 			}
 
-			parts := strings.Split(authHeader, " ")
-			if len(parts) != 2 || parts[0] != "Bearer" {
+			parts := strings.Fields(authHeader)
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
 				http.Error(w, "invalid Authorization header", http.StatusUnauthorized)
 				return
 			}
