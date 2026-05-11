@@ -12,10 +12,15 @@ import (
 )
 
 type Config struct {
-	Port         string
-	Environment  string
-	LogLevel     string
-	APISecret    string
+	Port        string
+	Environment string
+	LogLevel    string
+	APISecret   string
+
+	JWTSecret              string
+	JWTExpiration          time.Duration
+	RefreshTokenExpiration time.Duration
+
 	DBConfig     DatabaseConfig
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
@@ -45,14 +50,20 @@ func Load() *Config {
 	readTimeout, _ := time.ParseDuration(getEnv("READ_TIMEOUT", "10s"))
 	writeTimeout, _ := time.ParseDuration(getEnv("WRITE_TIMEOUT", "10s"))
 
+	jwtExpiration, _ := time.ParseDuration(getEnv("JWT_EXPIRATION", "15m"))
+	refreshTokenExpiration, _ := time.ParseDuration(getEnv("REFRESH_TOKEN_EXPIRATION", "168h"))
+
 	return &Config{
-		Port:         getEnv("PORT", "8080"),
-		Environment:  getEnv("ENVIRONMENT", "production"),
-		LogLevel:     getEnv("LOG_LEVEL", "info"),
-		APISecret:    getEnv("API_SECRET", "stub"),
-		ReadTimeout:  readTimeout,
-		WriteTimeout: writeTimeout,
-		RateLimit:    rateLimit,
+		Port:                   getEnv("PORT", "8080"),
+		Environment:            getEnv("ENVIRONMENT", "production"),
+		LogLevel:               getEnv("LOG_LEVEL", "info"),
+		APISecret:              getEnv("API_SECRET", "stub"),
+		JWTSecret:              getEnv("JWT_SECRET", "dev-secret"),
+		JWTExpiration:          jwtExpiration,
+		RefreshTokenExpiration: refreshTokenExpiration,
+		ReadTimeout:            readTimeout,
+		WriteTimeout:           writeTimeout,
+		RateLimit:              rateLimit,
 		DBConfig: DatabaseConfig{
 			Host:           getEnv("MONGO_HOST", "mongo"),
 			Port:           dbPort,

@@ -12,10 +12,15 @@ import (
 )
 
 type Config struct {
-	Port         string
-	Environment  string
-	LogLevel     string
-	APISecret    string
+	Port        string
+	Environment string
+	LogLevel    string
+	APISecret   string
+
+	JWTSecret            string
+	JWTExpiration        time.Duration
+	JWTRefreshExpiration time.Duration
+
 	DBConfig     DatabaseConfig
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
@@ -33,7 +38,7 @@ type DatabaseConfig struct {
 }
 
 func Load() *Config {
-	if err := godotenv.Load("/app/storage/config/.env"); err != nil {
+	if err := godotenv.Load("/app/config/.env"); err != nil {
 		log.Println("No .env file found, using environment variables")
 	}
 
@@ -45,14 +50,20 @@ func Load() *Config {
 	readTimeout, _ := time.ParseDuration(getEnv("READ_TIMEOUT", "10s"))
 	writeTimeout, _ := time.ParseDuration(getEnv("WRITE_TIMEOUT", "10s"))
 
+	jwtExpiration, _ := time.ParseDuration(getEnv("JWT_EXPIRATION", "15m"))
+	jwtRefreshExpiration, _ := time.ParseDuration(getEnv("JWT_REFRESH_EXPIRATION", "168h"))
+
 	return &Config{
-		Port:         getEnv("PORT", "8080"),
-		Environment:  getEnv("ENVIRONMENT", "production"),
-		LogLevel:     getEnv("LOG_LEVEL", "info"),
-		APISecret:    getEnv("API_SECRET", "stub"),
-		ReadTimeout:  readTimeout,
-		WriteTimeout: writeTimeout,
-		RateLimit:    rateLimit,
+		Port:                 getEnv("PORT", "8080"),
+		Environment:          getEnv("ENVIRONMENT", "production"),
+		LogLevel:             getEnv("LOG_LEVEL", "info"),
+		APISecret:            getEnv("API_SECRET", "stub"),
+		JWTSecret:            getEnv("JWT_SECRET", "dev-secret"),
+		JWTExpiration:        jwtExpiration,
+		JWTRefreshExpiration: jwtRefreshExpiration,
+		ReadTimeout:          readTimeout,
+		WriteTimeout:         writeTimeout,
+		RateLimit:            rateLimit,
 		DBConfig: DatabaseConfig{
 			Host:           getEnv("MONGO_HOST", "mongo"),
 			Port:           dbPort,
