@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"wb-landing-builder/auth/models"
+
+	"github.com/rki-mai/wb-landing-builder/auth/models"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"

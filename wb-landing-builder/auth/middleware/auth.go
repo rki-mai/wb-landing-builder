@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"wb-landing-builder/auth/service"
+	"github.com/rki-mai/wb-landing-builder/auth/service"
 )
 
 type contextKey string

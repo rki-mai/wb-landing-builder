@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"wb-landing-builder/auth/models"
-	"wb-landing-builder/auth/service"
+	"github.com/rki-mai/wb-landing-builder/auth/models"
+	"github.com/rki-mai/wb-landing-builder/auth/service"
 )
 
 type Handler struct {

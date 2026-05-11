@@ -5,9 +5,9 @@ import (
 	"errors"
 	"time"
 
-	"wb-landing-builder/auth/models"
-	"wb-landing-builder/auth/repository"
-	"wb-landing-builder/config"
+	"github.com/rki-mai/wb-landing-builder/auth/models"
+	"github.com/rki-mai/wb-landing-builder/auth/repository"
+	"github.com/rki-mai/wb-landing-builder/config"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
