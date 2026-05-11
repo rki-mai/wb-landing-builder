@@ -1,83 +1,66 @@
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+
+    container_name: wb-app
+
+    ports:
+      - "8080:8080"
+
+    volumes:
+      - .:/app
+
+    depends_on:
+      - mongo
+
+    networks:
+      - app-network
+
   mongo:
     image: mongo:7
-    container_name: landing-mongo
+
+    container_name: wb-mongo
+
     restart: always
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+
     ports:
       - "27017:27017"
+
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
+
     volumes:
       - mongodata:/data/db
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok' | grep 1"]
-      interval: 5s
-      timeout: 30s
-      retries: 20
-      start_period: 20s
 
-  mongo-init:
-    image: mongo:7
-    depends_on:
-      mongo:
-        condition: service_healthy
     networks:
       - app-network
-    restart: "no"
-    entrypoint: >
-      bash -c '
-        echo "Waiting for MongoDB to be ready..."
-        until mongosh --host mongo:27017 --quiet --eval "db.adminCommand({ ping: 1 }).ok" | grep 1; do
-          sleep 1
-        done
-        echo "MongoDB is ready. Initializing replica set..."
-        mongosh --host mongo:27017 --quiet --eval "
-          try {
-            const status = rs.status();
-            print(\"Replica set already initialized: \" + status.set);
-          } catch (e) {
-            print(\"Initializing replica set...\");
-            rs.initiate({ _id: \"rs0\", members: [{ _id: 0, host: \"mongo:27017\" }] });
-            print(\"Replica set initialized successfully\");
-          }
-        "
-        echo "Creating admin user..."
-        mongosh --host mongo:27017 --quiet --eval "
-          db = db.getSiblingDB(\"admin\");
-          if (!db.getUser(\"admin\")) {
-            db.createUser({
-              user: \"admin\",
-              pwd: \"admin\",
-              roles: [{ role: \"root\", db: \"admin\" }]
-            });
-            print(\"Admin user created successfully\");
-          } else {
-            print(\"Admin user already exists\");
-          }
-        "
-        echo "MongoDB initialization complete!"
-      '
 
   mongo-express:
-    image: mongo-express:latest
-    container_name: landing-mongo-express
+    image: mongo-express
+
+    container_name: wb-mongo-express
+
     restart: always
+
     ports:
       - "8081:8081"
+
     environment:
-      ME_CONFIG_MONGODB_URL: mongodb://admin:admin@mongo:27017/?replicaSet=rs0&authSource=admin
-      ME_CONFIG_BASICAUTH: false
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: admin
+      ME_CONFIG_MONGODB_URL: mongodb://admin:admin@mongo:27017/
+
     depends_on:
-      mongo-init:
-        condition: service_completed_successfully
+      - mongo
+
     networks:
       - app-network
 
 volumes:
   mongodata:
-    driver: local
 
 networks:
   app-network:
-    driver: bridge
