@@ -14,4 +14,5 @@ FROM alpine:latest AS runtime
 
 WORKDIR /app/
 COPY --from=builder /app/wb-landing-builder .
+COPY --from=builder /app/storage/handler/schema.json storage/handler/schema.json
 CMD ["/app/wb-landing-builder"]
