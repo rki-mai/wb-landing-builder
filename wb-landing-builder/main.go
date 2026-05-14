@@ -11,51 +11,46 @@ import (
 	"time"
 
 	draftConfig "github.com/rki-mai/wb-landing-builder/storage/config"
-	draftHandler "github.com/rki-mai/wb-landing-builder/storage/handler"
-	draftRepository "github.com/rki-mai/wb-landing-builder/storage/repository"
-	draftService "github.com/rki-mai/wb-landing-builder/storage/service"
 
-	authHandler "github.com/rki-mai/wb-landing-builder/auth/handler"
-	authMiddleware "github.com/rki-mai/wb-landing-builder/auth/middleware"
-	authRepository "github.com/rki-mai/wb-landing-builder/auth/repository"
-	authService "github.com/rki-mai/wb-landing-builder/auth/service"
-	authConfig "github.com/rki-mai/wb-landing-builder/config"
+	"github.com/rki-mai/wb-landing-builder/auth"
+	"github.com/rki-mai/wb-landing-builder/config"
+	"github.com/rki-mai/wb-landing-builder/storage"
 )
 
 func main() {
 	cfg := draftConfig.Load()
-	authCfg := authConfig.Load()
+	authConfig := config.Load()
 
 	log.Printf("Starting Landing Builder API on port: %s", cfg.Port)
 	log.Printf("Environment: %s", cfg.Environment)
 
 	log.Print(cfg.GetMongoURI(), " ", cfg.DBConfig.Database)
 
-	draftRepo, err := draftRepository.NewDraftRepository(cfg.GetMongoURI(), cfg.DBConfig.Database, cfg.DBConfig.TtlDays)
+	draftRepository, err := storage.NewDraftRepository(cfg.GetMongoURI(), cfg.DBConfig.Database, cfg.DBConfig.TtlDays)
 	if err != nil {
 		log.Fatalf("Failed to init draft repository: %v", err)
 	}
 
-	authRepo, err := authRepository.NewAuthRepository(authCfg.GetMongoURI(), authCfg.DBConfig.Database)
+	authRepository, err := auth.NewAuthRepository(authConfig.GetMongoURI(), authConfig.DBConfig.Database)
 	if err != nil {
 		log.Fatalf("Failed to init auth repository: %v", err)
 	}
 
-	draftH, err := draftHandler.NewHandler(draftService.NewDraftService(draftRepo, cfg), cfg)
+	draftHandler, err := storage.NewDraftHandler(storage.NewDraftService(draftRepository, cfg), cfg)
 	if err != nil {
 		log.Fatalf("Draft handler creation failed: %v", err)
 	}
 
-	authSvc := authService.NewAuthService(authRepo, authCfg)
+	authService := auth.NewAuthService(authRepository, authConfig)
 
-	authH := authHandler.NewHandler(authSvc)
+	authHandler := auth.NewAuthHandler(authService)
 
-	authMV := authMiddleware.AuthMiddleware(authSvc)
+	authMiddleware := auth.AuthMiddleware(authService)
 
 	mux := http.NewServeMux()
 
-	authH.RegisterRoutes(mux, authMV)
-	draftH.RegisterRoutes(mux, authMV)
+	authHandler.RegisterRoutes(mux, authMiddleware)
+	draftHandler.RegisterRoutes(mux, authMiddleware)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
@@ -85,11 +80,11 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
-	if err := draftRepo.Close(ctx); err != nil {
+	if err := draftRepository.Close(ctx); err != nil {
 		log.Printf("Failed to close draft repository: %v", err)
 	}
 
-	if err := authRepo.Close(ctx); err != nil {
+	if err := authRepository.Close(ctx); err != nil {
 		log.Printf("Failed to close auth repository: %v", err)
 	}
 

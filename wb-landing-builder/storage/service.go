@@ -1,4 +1,4 @@
-package service
+package storage
 
 import (
 	"context"
@@ -8,8 +8,6 @@ import (
 
 	"github.com/mohae/deepcopy"
 	"github.com/rki-mai/wb-landing-builder/storage/config"
-	"github.com/rki-mai/wb-landing-builder/storage/models"
-	"github.com/rki-mai/wb-landing-builder/storage/repository"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -18,11 +16,11 @@ const (
 )
 
 type DraftService struct {
-	repo      repository.DraftRepository
+	repo      DraftRepository
 	semaphore chan struct{}
 }
 
-func NewDraftService(repo repository.DraftRepository, cfg *config.Config) DraftService {
+func NewDraftService(repo DraftRepository, cfg *config.Config) DraftService {
 	return DraftService{
 		repo:      repo,
 		semaphore: make(chan struct{}, cfg.DBConfig.MaxConnections),
@@ -64,12 +62,12 @@ func toMap(v interface{}) (map[string]interface{}, bool) {
 	}
 }
 
-func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, mutation models.Mutation) (int, error) {
+func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, mutation Mutation) (int, error) {
 	s.semaphore <- struct{}{}
 	defer func() { <-s.semaphore }()
 	mutationToInsert := mutation.Data
-	mutationToInsert["deleted"] = mutation.Operation == models.OperationDelete
-	if mutation.Operation == models.OperationUpdate {
+	mutationToInsert["deleted"] = mutation.Operation == OperationDelete
+	if mutation.Operation == OperationUpdate {
 		latestMutation, err := s.repo.GetLatestMutationForID(ctx, projectID, mutation.Data["id"].(string))
 		if err != nil {
 			return 0, err

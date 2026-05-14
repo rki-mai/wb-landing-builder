@@ -1,11 +1,9 @@
-package repository
+package auth
 
 import (
 	"context"
 	"fmt"
 	"time"
-
-	"github.com/rki-mai/wb-landing-builder/auth/models"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -13,12 +11,12 @@ import (
 )
 
 type AuthRepository interface {
-	CreateUser(ctx context.Context, user *models.User) error
-	GetUserByEmail(ctx context.Context, email string) (*models.User, error)
-	GetUserByID(ctx context.Context, id string) (*models.User, error)
+	CreateUser(ctx context.Context, user *User) error
+	GetUserByEmail(ctx context.Context, email string) (*User, error)
+	GetUserByID(ctx context.Context, id string) (*User, error)
 
-	SaveRefreshToken(ctx context.Context, token *models.RefreshToken) error
-	GetRefreshToken(ctx context.Context, token string) (*models.RefreshToken, error)
+	SaveRefreshToken(ctx context.Context, token *RefreshToken) error
+	GetRefreshToken(ctx context.Context, token string) (*RefreshToken, error)
 	DeleteRefreshToken(ctx context.Context, token string) error
 
 	Close(ctx context.Context) error
@@ -91,13 +89,13 @@ func createIndexes(r *authRepository) error {
 	return nil
 }
 
-func (r *authRepository) CreateUser(ctx context.Context, user *models.User) error {
+func (r *authRepository) CreateUser(ctx context.Context, user *User) error {
 	_, err := r.usersCollection.InsertOne(ctx, user)
 	return err
 }
 
-func (r *authRepository) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
-	var user models.User
+func (r *authRepository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
+	var user User
 
 	err := r.usersCollection.FindOne(ctx, bson.M{"email": email}).Decode(&user)
 	if err == mongo.ErrNoDocuments {
@@ -110,8 +108,8 @@ func (r *authRepository) GetUserByEmail(ctx context.Context, email string) (*mod
 	return &user, nil
 }
 
-func (r *authRepository) GetUserByID(ctx context.Context, id string) (*models.User, error) {
-	var user models.User
+func (r *authRepository) GetUserByID(ctx context.Context, id string) (*User, error) {
+	var user User
 
 	err := r.usersCollection.FindOne(ctx, bson.M{"_id": id}).Decode(&user)
 	if err == mongo.ErrNoDocuments {
@@ -124,13 +122,13 @@ func (r *authRepository) GetUserByID(ctx context.Context, id string) (*models.Us
 	return &user, nil
 }
 
-func (r *authRepository) SaveRefreshToken(ctx context.Context, token *models.RefreshToken) error {
+func (r *authRepository) SaveRefreshToken(ctx context.Context, token *RefreshToken) error {
 	_, err := r.refreshTokensCollection.InsertOne(ctx, token)
 	return err
 }
 
-func (r *authRepository) GetRefreshToken(ctx context.Context, token string) (*models.RefreshToken, error) {
-	var rt models.RefreshToken
+func (r *authRepository) GetRefreshToken(ctx context.Context, token string) (*RefreshToken, error) {
+	var rt RefreshToken
 
 	err := r.refreshTokensCollection.FindOne(ctx, bson.M{"token": token}).Decode(&rt)
 	if err == mongo.ErrNoDocuments {

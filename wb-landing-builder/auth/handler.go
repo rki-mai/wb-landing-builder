@@ -1,19 +1,15 @@
-package handler
+package auth
 
 import (
 	"encoding/json"
 	"net/http"
-
-	"github.com/rki-mai/wb-landing-builder/auth/middleware"
-	"github.com/rki-mai/wb-landing-builder/auth/models"
-	"github.com/rki-mai/wb-landing-builder/auth/service"
 )
 
 type Handler struct {
-	service *service.AuthService
+	service *AuthService
 }
 
-func NewHandler(svc *service.AuthService) *Handler {
+func NewAuthHandler(svc *AuthService) *Handler {
 	return &Handler{service: svc}
 }
 
@@ -26,7 +22,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, middleware func(http.Handle
 }
 
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
-	var req models.RegisterRequest
+	var req RegisterRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid request body")
@@ -55,7 +51,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
-	var req models.LoginRequest
+	var req LoginRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid request body")
@@ -72,7 +68,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
-	var req models.RefreshRequest
+	var req RefreshRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid request body")
@@ -94,7 +90,7 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value(middleware.UserIDKey).(string)
+	userID, ok := r.Context().Value(UserIDKey).(string)
 	if !ok {
 		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
 		return

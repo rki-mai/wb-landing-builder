@@ -1,11 +1,9 @@
-package middleware
+package auth
 
 import (
 	"context"
 	"net/http"
 	"strings"
-
-	"github.com/rki-mai/wb-landing-builder/auth/service"
 )
 
 type contextKey string
@@ -13,7 +11,7 @@ type contextKey string
 const UserIDKey contextKey = "user_id"
 
 func AuthMiddleware(
-	authService *service.AuthService,
+	authService *AuthService,
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
