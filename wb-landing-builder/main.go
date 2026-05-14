@@ -1,4 +1,25 @@
-// main.go
+// Package main точка входа в приложение WB Landing Builder API.
+//
+// @title           WB Landing Builder API
+// @version         1.0
+// @description     API для управления черновиками лендингов и аутентификации пользователей.
+// @termsOfService  http://swagger.io/terms/
+
+// @contact.name   API Support
+// @contact.url    http://www.swagger.io/support
+// @contact.email  support@swagger.io
+
+// @license.name  Apache 2.0
+// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
+
+// @host      localhost:8080
+// @BasePath  /
+// @schemes   http
+
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
 package main
 
 import (
@@ -10,16 +31,17 @@ import (
 	"syscall"
 	"time"
 
-	draftConfig "github.com/rki-mai/wb-landing-builder/storage/config"
-
 	"github.com/rki-mai/wb-landing-builder/auth"
 	"github.com/rki-mai/wb-landing-builder/config"
 	"github.com/rki-mai/wb-landing-builder/storage"
+
+	_ "github.com/rki-mai/wb-landing-builder/docs"
+
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 func main() {
-	cfg := draftConfig.Load()
-	authConfig := config.Load()
+	cfg := config.Load()
 
 	log.Printf("Starting Landing Builder API on port: %s", cfg.Port)
 	log.Printf("Environment: %s", cfg.Environment)
@@ -31,7 +53,7 @@ func main() {
 		log.Fatalf("Failed to init draft repository: %v", err)
 	}
 
-	authRepository, err := auth.NewAuthRepository(authConfig.GetMongoURI(), authConfig.DBConfig.Database)
+	authRepository, err := auth.NewAuthRepository(cfg.GetMongoURI(), cfg.DBConfig.Database)
 	if err != nil {
 		log.Fatalf("Failed to init auth repository: %v", err)
 	}
@@ -41,7 +63,7 @@ func main() {
 		log.Fatalf("Draft handler creation failed: %v", err)
 	}
 
-	authService := auth.NewAuthService(authRepository, authConfig)
+	authService := auth.NewAuthService(authRepository, cfg)
 
 	authHandler := auth.NewAuthHandler(authService)
 
@@ -51,6 +73,13 @@ func main() {
 
 	authHandler.RegisterRoutes(mux, authMiddleware)
 	draftHandler.RegisterRoutes(mux, authMiddleware)
+
+	mux.Handle("/swagger/", httpSwagger.Handler(
+		httpSwagger.URL("/swagger/doc.json"),
+	))
+
+	log.Println("Swagger handler registered at /swagger/*")
+	log.Println("Swagger JSON URL: http://localhost:" + cfg.Port + "/swagger/doc.json")
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

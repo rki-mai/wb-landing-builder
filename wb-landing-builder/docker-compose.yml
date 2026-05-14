@@ -77,6 +77,8 @@ services:
   wb-landing-builder:
     build: .
     image: wb-landing-builder:latest
+    container_name: wb-landing-builder
+    restart: on-failure
     ports:
       - "8080:8080"
     environment:
@@ -87,7 +89,6 @@ services:
       - WRITE_TIMEOUT=10s
       - RATE_LIMIT=100
       - API_SECRET=stub
-
       - MONGO_HOST=mongo
       - MONGO_PORT=27017
       - MONGO_USER=admin
@@ -95,13 +96,13 @@ services:
       - MONGO_DATABASE=storage
       - MONGO_MAX_CONNECTIONS=100
       - MONGO_TTL_DAYS=30
-
     depends_on:
-      mongo:
-        condition: service_healthy
-
+      mongo-init:
+        condition: service_completed_successfully
     networks:
       - app-network
+    volumes:
+      - .:/app
 
 volumes:
   mongodata:

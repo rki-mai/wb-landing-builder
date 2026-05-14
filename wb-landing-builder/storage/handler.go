@@ -12,17 +12,20 @@ import (
 
 	"github.com/xeipuuv/gojsonschema"
 
-	"github.com/rki-mai/wb-landing-builder/storage/config"
+	"github.com/rki-mai/wb-landing-builder/config"
 )
 
+// MaxBodySize ограничивает размер тела запроса в 1 МБ
 const MaxBodySize = 1 << 20
 
+// DraftHandler обрабатывает HTTP-запросы, связанные с черновиками страниц.
 type DraftHandler struct {
 	service     DraftService
 	schema      *gojsonschema.Schema
 	rateLimiter *RateLimiter
 }
 
+// RateLimiter реализует алгоритм скользящего окна для ограничения частоты запросов.
 type RateLimiter struct {
 	mu            sync.RWMutex
 	requests      map[string][]time.Time
@@ -121,6 +124,7 @@ func NewDraftHandler(svc DraftService, cfg *config.Config) (*DraftHandler, error
 	}, nil
 }
 
+// RegisterRoutes регистрирует маршруты для обработчика черновиков.
 func (h *DraftHandler) RegisterRoutes(
 	mux *http.ServeMux,
 	middleware func(http.Handler) http.Handler,
@@ -155,6 +159,21 @@ func (h *DraftHandler) handleLimit(w http.ResponseWriter, projectID string) bool
 	return true
 }
 
+// ApplyMutation применяет мутацию к черновику страницы проекта.
+// @Summary Применить мутацию
+// @Description Применяет JSON-мутацию к указанному проекту после проверки схемы и лимитов.
+// @Tags Storage
+// @Accept json
+// @Security BearerAuth
+// @Produce json
+// @Param project_id path string true "ID проекта"
+// @Param mutation body Mutation true "Объект мутации"
+// @Success 200 {object} ErrorResponse "Успешное применение, возвращает версию"
+// @Failure 400 {object} ErrorResponse "Ошибка валидации или неверный запрос"
+// @Failure 413 {object} ErrorResponse "Превышен размер payload"
+// @Failure 429 {object} ErrorResponse "Превышен лимит запросов"
+// @Failure 500 {object} ErrorResponse "Внутренняя ошибка сервера"
+// @Router /api/v1/storage/{project_id}/mutations [post]
 func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 
@@ -211,6 +230,18 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(w, http.StatusOK, map[string]string{"status": "ok", "version": strconv.FormatInt(int64(version), 10)})
 }
 
+// GetLatestDraft получает последнюю версию черновика страницы.
+// @Summary Получить последний черновик
+// @Description Возвращает актуальную версию страницы для указанного проекта.
+// @Tags Storage
+// @Accept json
+// @Security BearerAuth
+// @Produce json
+// @Param project_id path string true "ID проекта"
+// @Success 200 {object} Mutation "JSON контент страницы"
+// @Failure 400 {object} ErrorResponse "Отсутствует project_id"
+// @Failure 500 {object} ErrorResponse "Ошибка получения данных"
+// @Router /api/v1/storage/{project_id} [get]
 func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 	if projectID == "" {
@@ -227,6 +258,19 @@ func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(w, http.StatusOK, page)
 }
 
+// GetDraftByVersion получает конкретную версию черновика страницы.
+// @Summary Получить версию черновика
+// @Description Возвращает страницу указанной версии для проекта.
+// @Tags Storage
+// @Accept json
+// @Security BearerAuth
+// @Produce json
+// @Param project_id path string true "ID проекта"
+// @Param version path int true "Номер версии"
+// @Success 200 {object} string "JSON контент страницы"
+// @Failure 400 {object} ErrorResponse "Неверный ID или версия"
+// @Failure 500 {object} ErrorResponse "Ошибка получения данных"
+// @Router /api/v1/storage/{project_id}/versions/{version} [get]
 func (h *DraftHandler) sendPage(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 	version, err := strconv.Atoi(r.PathValue("version"))
