@@ -1,4 +1,4 @@
-package handler
+package storage
 
 import (
 	"encoding/json"
@@ -13,14 +13,12 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/rki-mai/wb-landing-builder/storage/config"
-	"github.com/rki-mai/wb-landing-builder/storage/models"
-	"github.com/rki-mai/wb-landing-builder/storage/service"
 )
 
 const MaxBodySize = 1 << 20
 
-type Handler struct {
-	service     service.DraftService
+type DraftHandler struct {
+	service     DraftService
 	schema      *gojsonschema.Schema
 	rateLimiter *RateLimiter
 }
@@ -109,21 +107,21 @@ func (rl *RateLimiter) Stop() {
 	rl.cleanupTicker.Stop()
 }
 
-func NewHandler(svc service.DraftService, cfg *config.Config) (*Handler, error) {
-	schemaLoader := gojsonschema.NewReferenceLoader("file:///app/storage/handler/schema.json")
+func NewDraftHandler(svc DraftService, cfg *config.Config) (*DraftHandler, error) {
+	schemaLoader := gojsonschema.NewReferenceLoader("file:///app/storage/schema.json")
 	schema, err := gojsonschema.NewSchema(schemaLoader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read schema file: %w", err)
 	}
 
-	return &Handler{
+	return &DraftHandler{
 		service:     svc,
 		schema:      schema,
 		rateLimiter: NewRateLimiter(cfg.RateLimit, time.Minute),
 	}, nil
 }
 
-func (h *Handler) RegisterRoutes(
+func (h *DraftHandler) RegisterRoutes(
 	mux *http.ServeMux,
 	middleware func(http.Handler) http.Handler,
 ) {
@@ -141,7 +139,7 @@ func (h *Handler) RegisterRoutes(
 	)
 }
 
-func (h *Handler) handleLimit(w http.ResponseWriter, projectID string) bool {
+func (h *DraftHandler) handleLimit(w http.ResponseWriter, projectID string) bool {
 	allowed, _, retryAfter := h.rateLimiter.Allow(projectID)
 	if !allowed {
 		w.Header().Set("X-RateLimit-Limit", strconv.Itoa(h.rateLimiter.limit))
@@ -157,7 +155,7 @@ func (h *Handler) handleLimit(w http.ResponseWriter, projectID string) bool {
 	return true
 }
 
-func (h *Handler) applyMutation(w http.ResponseWriter, r *http.Request) {
+func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 
 	if projectID == "" {
@@ -198,7 +196,7 @@ func (h *Handler) applyMutation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var mutation models.Mutation
+	var mutation Mutation
 	if err := json.Unmarshal(body, &mutation); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid mutation payload: "+err.Error())
 		return
@@ -213,7 +211,7 @@ func (h *Handler) applyMutation(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(w, http.StatusOK, map[string]string{"status": "ok", "version": strconv.FormatInt(int64(version), 10)})
 }
 
-func (h *Handler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
+func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 	if projectID == "" {
 		writeJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
@@ -229,7 +227,7 @@ func (h *Handler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 	writeJSONResponse(w, http.StatusOK, page)
 }
 
-func (h *Handler) sendPage(w http.ResponseWriter, r *http.Request) {
+func (h *DraftHandler) sendPage(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 	version, err := strconv.Atoi(r.PathValue("version"))
 

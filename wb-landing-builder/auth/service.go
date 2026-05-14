@@ -1,12 +1,10 @@
-package service
+package auth
 
 import (
 	"context"
 	"errors"
 	"time"
 
-	"github.com/rki-mai/wb-landing-builder/auth/models"
-	"github.com/rki-mai/wb-landing-builder/auth/repository"
 	"github.com/rki-mai/wb-landing-builder/config"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -15,14 +13,14 @@ import (
 )
 
 type AuthService struct {
-	repo       repository.AuthRepository
+	repo       AuthRepository
 	jwtSecret  string
 	accessTTL  time.Duration
 	refreshTTL time.Duration
 }
 
 func NewAuthService(
-	repo repository.AuthRepository,
+	repo AuthRepository,
 	cfg *config.Config,
 ) *AuthService {
 	return &AuthService{
@@ -33,7 +31,7 @@ func NewAuthService(
 	}
 }
 
-func (s *AuthService) Register(ctx context.Context, email, password string) (*models.User, error) {
+func (s *AuthService) Register(ctx context.Context, email, password string) (*User, error) {
 	existing, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil {
 		return nil, err
@@ -47,7 +45,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (*mo
 		return nil, err
 	}
 
-	user := &models.User{
+	user := &User{
 		ID:           uuid.NewString(),
 		Email:        email,
 		PasswordHash: string(hash),
@@ -61,7 +59,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (*mo
 	return user, nil
 }
 
-func (s *AuthService) Login(ctx context.Context, email, password string) (*models.TokenResponse, error) {
+func (s *AuthService) Login(ctx context.Context, email, password string) (*TokenResponse, error) {
 	user, err := s.repo.GetUserByEmail(ctx, email)
 	if err != nil || user == nil {
 		return nil, errors.New("invalid credentials")
@@ -74,7 +72,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*model
 	return s.generateTokens(ctx, user.ID)
 }
 
-func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*models.TokenResponse, error) {
+func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*TokenResponse, error) {
 	stored, err := s.repo.GetRefreshToken(ctx, refreshToken)
 	if err != nil || stored == nil {
 		return nil, errors.New("invalid refresh token")
@@ -91,10 +89,10 @@ func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*models
 	return s.generateTokens(ctx, stored.UserID)
 }
 
-func (s *AuthService) generateTokens(ctx context.Context, userID string) (*models.TokenResponse, error) {
+func (s *AuthService) generateTokens(ctx context.Context, userID string) (*TokenResponse, error) {
 	now := time.Now()
 
-	claims := models.Claims{
+	claims := Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTTL)),
@@ -110,7 +108,7 @@ func (s *AuthService) generateTokens(ctx context.Context, userID string) (*model
 
 	refreshToken := uuid.NewString()
 
-	rt := &models.RefreshToken{
+	rt := &RefreshToken{
 		ID:        uuid.NewString(),
 		UserID:    userID,
 		Token:     refreshToken,
@@ -122,7 +120,7 @@ func (s *AuthService) generateTokens(ctx context.Context, userID string) (*model
 		return nil, err
 	}
 
-	return &models.TokenResponse{
+	return &TokenResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		ExpiresIn:    int64(s.accessTTL.Seconds()),
@@ -132,7 +130,7 @@ func (s *AuthService) generateTokens(ctx context.Context, userID string) (*model
 func (s *AuthService) GetUserFromToken(tokenStr string) (string, error) {
 	token, err := jwt.ParseWithClaims(
 		tokenStr,
-		&models.Claims{},
+		&Claims{},
 		func(token *jwt.Token) (interface{}, error) {
 
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -147,7 +145,7 @@ func (s *AuthService) GetUserFromToken(tokenStr string) (string, error) {
 		return "", errors.New("invalid token")
 	}
 
-	claims, ok := token.Claims.(*models.Claims)
+	claims, ok := token.Claims.(*Claims)
 	if !ok {
 		return "", errors.New("invalid claims")
 	}
@@ -155,7 +153,7 @@ func (s *AuthService) GetUserFromToken(tokenStr string) (string, error) {
 	return claims.UserID, nil
 }
 
-func (s *AuthService) GetUserByID(ctx context.Context, id string) (*models.User, error) {
+func (s *AuthService) GetUserByID(ctx context.Context, id string) (*User, error) {
 	user, err := s.repo.GetUserByID(ctx, id)
 	if err != nil {
 		return nil, err
