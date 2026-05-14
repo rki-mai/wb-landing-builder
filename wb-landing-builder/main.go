@@ -10,16 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	draftConfig "github.com/rki-mai/wb-landing-builder/storage/config"
-
 	"github.com/rki-mai/wb-landing-builder/auth"
 	"github.com/rki-mai/wb-landing-builder/config"
 	"github.com/rki-mai/wb-landing-builder/storage"
 )
 
 func main() {
-	cfg := draftConfig.Load()
-	authConfig := config.Load()
+	cfg := config.Load()
 
 	log.Printf("Starting Landing Builder API on port: %s", cfg.Port)
 	log.Printf("Environment: %s", cfg.Environment)
@@ -31,7 +28,7 @@ func main() {
 		log.Fatalf("Failed to init draft repository: %v", err)
 	}
 
-	authRepository, err := auth.NewAuthRepository(authConfig.GetMongoURI(), authConfig.DBConfig.Database)
+	authRepository, err := auth.NewAuthRepository(cfg.GetMongoURI(), cfg.DBConfig.Database)
 	if err != nil {
 		log.Fatalf("Failed to init auth repository: %v", err)
 	}
@@ -41,7 +38,7 @@ func main() {
 		log.Fatalf("Draft handler creation failed: %v", err)
 	}
 
-	authService := auth.NewAuthService(authRepository, authConfig)
+	authService := auth.NewAuthService(authRepository, cfg)
 
 	authHandler := auth.NewAuthHandler(authService)
 
