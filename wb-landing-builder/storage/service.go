@@ -7,7 +7,7 @@ import (
 	"math"
 
 	"github.com/mohae/deepcopy"
-	"github.com/rki-mai/wb-landing-builder/storage/config"
+	"github.com/rki-mai/wb-landing-builder/config"
 	"go.mongodb.org/mongo-driver/bson"
 )
 

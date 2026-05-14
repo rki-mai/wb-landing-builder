@@ -12,7 +12,7 @@ import (
 
 	"github.com/xeipuuv/gojsonschema"
 
-	"github.com/rki-mai/wb-landing-builder/storage/config"
+	"github.com/rki-mai/wb-landing-builder/config"
 )
 
 const MaxBodySize = 1 << 20
