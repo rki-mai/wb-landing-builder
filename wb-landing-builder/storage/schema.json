@@ -25,7 +25,7 @@
             "properties": {
                 "id": {
                     "type": "string",
-                    "pattern": "^lb-[1-9][0-9]*$",
+                    "pattern": "^lb-.*$",
                     "description": "Element ID in format lb-N"
                 },
                 "styles": {
@@ -220,7 +220,7 @@
                 },
                 "parentId": {
                     "type": "string",
-                    "pattern": "^(root|lb-[1-9][0-9]*)$",
+                    "pattern": "^(root|lb-.*)$",
                     "description": "Parent element ID or 'root' for top-level placement"
                 },
                 "index": {
@@ -239,7 +239,7 @@
                 },
                 "id": {
                     "type": "string",
-                    "pattern": "^lb-[1-9][0-9]*$",
+                    "pattern": "^lb-.*$",
                     "description": "Optional ID for new element (server usually generates)"
                 }
             },
@@ -338,7 +338,7 @@
                 },
                 "parentId": {
                     "type": "string",
-                    "pattern": "^(root|lb-[1-9][0-9]*)$",
+                    "pattern": "^(root|lb-.*)$",
                     "description": "Move to new parent"
                 },
                 "index": {
@@ -368,7 +368,7 @@
             "properties": {
                 "id": {
                     "type": "string",
-                    "pattern": "^lb-[1-9][0-9]*$",
+                    "pattern": "^lb-.*$",
                     "description": "ID of element to update"
                 },
                 "fields": {
@@ -385,7 +385,7 @@
             "properties": {
                 "id": {
                     "type": "string",
-                    "pattern": "^lb-[1-9][0-9]*$",
+                    "pattern": "^lb-.*$",
                     "description": "ID of element to delete (cascading)"
                 }
             },

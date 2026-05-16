@@ -78,9 +78,6 @@ func main() {
 		httpSwagger.URL("/swagger/doc.json"),
 	))
 
-	log.Println("Swagger handler registered at /swagger/*")
-	log.Println("Swagger JSON URL: http://localhost:" + cfg.Port + "/swagger/doc.json")
-
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      mux,

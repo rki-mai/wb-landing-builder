@@ -77,7 +77,6 @@ services:
   wb-landing-builder:
     build: .
     image: wb-landing-builder:latest
-    container_name: wb-landing-builder
     restart: on-failure
     ports:
       - "8080:8080"
@@ -101,8 +100,6 @@ services:
         condition: service_completed_successfully
     networks:
       - app-network
-    volumes:
-      - .:/app
 
 volumes:
   mongodata:
