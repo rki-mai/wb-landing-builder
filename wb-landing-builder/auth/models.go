@@ -3,89 +3,85 @@ package auth
 import (
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
+	jwt "github.com/golang-jwt/jwt/v5"
 )
 
-// User представляет собой модель пользователя в системе.
 type User struct {
-	// ID уникальный идентификатор пользователя.
-	ID string `json:"id" bson:"_id,omitempty" example:"507f191e810c19729de860ea"`
-	// Email адрес электронной почты пользователя.
-	Email string `json:"email" bson:"email" example:"newuser@example.com"`
-	// PasswordHash хэш пароля (не возвращается в API ответах).
-	PasswordHash string `json:"-" bson:"password_hash"`
-	// CreatedAt дата и время создания аккаунта.
-	CreatedAt time.Time `json:"created_at" bson:"created_at" example:"2023-10-01T12:00:00Z"`
+	ID           string    `json:"id" bson:"_id,omitempty"`
+	Email        string    `json:"email" bson:"email"`
+	PasswordHash string    `json:"-" bson:"password_hash"`
+	CreatedAt    time.Time `json:"created_at" bson:"created_at"`
 }
 
-// Me представляет собой информацию о пользователе.
 type Me struct {
-	// ID уникальный идентификатор пользователя.
-	ID string `json:"id" bson:"_id,omitempty" example:"507f191e810c19729de860ea"`
-	// Email адрес электронной почты пользователя.
-	Email string `json:"email" bson:"email" example:"newuser@example.com"`
+	ID    string `json:"id"`
+	Email string `json:"email"`
 }
 
-// RefreshToken представляет собой запись refresh токена в базе данных.
 type RefreshToken struct {
-	// ID записи токена.
-	ID string `bson:"_id,omitempty"`
-	// UserID идентификатор пользователя, которому принадлежит токен.
-	UserID string `bson:"user_id"`
-	// Token строковое значение токена.
-	Token string `bson:"token"`
-	// ExpiresAt время истечения срока действия токена.
+	ID        string    `bson:"_id,omitempty"`
+	UserID    string    `bson:"user_id"`
+	Token     string    `bson:"token"`
 	ExpiresAt time.Time `bson:"expires_at"`
-	// CreatedAt время создания токена.
 	CreatedAt time.Time `bson:"created_at"`
 }
 
-// Claims содержит утверждения JWT для access токена.
 type Claims struct {
-	// UserID идентификатор пользователя в токене.
 	UserID string `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
-// RegisterRequest данные для регистрации нового пользователя.
+// RegisterRequest - запрос на регистрацию
 type RegisterRequest struct {
-	// Email адрес для регистрации.
-	// Required: true
-	Email string `json:"email" example:"newuser@example.com"`
-	// Пароль для доступа к аккаунту.
-	// Required: true
-	Password string `json:"password" example:"SuperSecretPass123"`
+	Body struct {
+		Email    string `json:"email" required:"true" example:"user@example.com" doc:"User email address"`
+		Password string `json:"password" required:"true" example:"secret123" doc:"User password (min 8 characters)" format:"password"`
+	}
 }
 
-// LoginRequest данные для входа в систему.
+// LoginRequest - запрос на вход
 type LoginRequest struct {
-	// Email адрес зарегистрированного пользователя.
-	// Required: true
-	Email string `json:"email" example:"newuser@example.com"`
-	// Пароль пользователя.
-	// Required: true
-	Password string `json:"password" example:"SuperSecretPass123"`
+	Body struct {
+		Email    string `json:"email" required:"true" example:"user@example.com" doc:"User email address"`
+		Password string `json:"password" required:"true" example:"secret123" doc:"User password" format:"password"`
+	}
 }
 
-// RefreshRequest данные для обновления пары токенов.
+// RefreshRequest - запрос на обновление токенов
 type RefreshRequest struct {
-	// RefreshToken токен, полученный при предыдущем входе или обновлении.
-	// Required: true
-	RefreshToken string `json:"refresh_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
+	Body struct {
+		RefreshToken string `json:"refresh_token" required:"true" example:"eyJhbGciOiJIUzI1..." doc:"Refresh token"`
+	}
 }
 
-// TokenResponse ответ сервера при успешной аутентификации или обновлении токенов.
+// TokenResponse - ответ с токенами
 type TokenResponse struct {
-	// AccessToken токен для авторизации защищенных запросов.
-	AccessToken string `json:"access_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
-	// RefreshToken токен для получения новой пары access/refresh.
-	RefreshToken string `json:"refresh_token" example:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."`
-	// ExpiresIn время жизни access токена в секундах.
-	ExpiresIn int64 `json:"expires_in" example:"3600"`
+	Body struct {
+		AccessToken  string `json:"access_token" example:"eyJhbGciOiJIUzI1..." doc:"JWT access token"`
+		RefreshToken string `json:"refresh_token" example:"eyJhbGciOiJIUzI1..." doc:"JWT refresh token"`
+		ExpiresIn    int64  `json:"expires_in" example:"3600" doc:"Token expiration time in seconds"`
+	}
 }
 
-// ErrorResponse стандартный формат ответа об ошибке.
+// ErrorResponse - ответ с ошибкой
 type ErrorResponse struct {
-	// Error описание произошедшей ошибки.
-	Error string `json:"error" example:"описание ошибки..."`
+	Body struct {
+		Error string `json:"error" example:"Invalid credentials" doc:"Error message"`
+	}
+}
+
+// MeResponse - ответ с данными текущего пользователя
+type MeResponse struct {
+	Body struct {
+		ID    string `json:"id" example:"507f1f77bcf86cd799439011" doc:"User ID"`
+		Email string `json:"email" example:"user@example.com" doc:"User email"`
+	}
+}
+
+// RegisterResponse - ответ при успешной регистрации
+type RegisterResponse struct {
+	Body struct {
+		ID    string `json:"id" example:"507f1f77bcf86cd799439011" doc:"User ID"`
+		Email string `json:"email" example:"user@example.com" doc:"User email"`
+	}
 }

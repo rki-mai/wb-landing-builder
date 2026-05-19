@@ -8,13 +8,18 @@ import (
 
 type contextKey string
 
-const UserIDKey contextKey = "user_id"
+const UserContextKey contextKey = "user_id"
 
 func AuthMiddleware(
 	authService *AuthService,
 ) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path := r.URL.Path
+			if !strings.Contains(path, "storage") && !strings.HasSuffix(path, "auth/me") {
+				next.ServeHTTP(w, r)
+				return
+			}
 
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
@@ -36,7 +41,7 @@ func AuthMiddleware(
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), UserIDKey, userID)
+			ctx := context.WithValue(r.Context(), UserContextKey, userID)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

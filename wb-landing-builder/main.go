@@ -1,25 +1,3 @@
-// Package main точка входа в приложение WB Landing Builder API.
-//
-// @title           WB Landing Builder API
-// @version         1.0
-// @description     API для управления черновиками лендингов и аутентификации пользователей.
-// @termsOfService  http://swagger.io/terms/
-
-// @contact.name   API Support
-// @contact.url    http://www.swagger.io/support
-// @contact.email  support@swagger.io
-
-// @license.name  Apache 2.0
-// @license.url   http://www.apache.org/licenses/LICENSE-2.0.html
-
-// @host      localhost:8080
-// @BasePath  /
-// @schemes   http
-
-// @securityDefinitions.apikey BearerAuth
-// @in header
-// @name Authorization
-// @description Type "Bearer" followed by a space and JWT token.
 package main
 
 import (
@@ -31,13 +9,13 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2/adapters/humachi"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
+
 	"github.com/rki-mai/wb-landing-builder/auth"
-	"github.com/rki-mai/wb-landing-builder/config"
+	config "github.com/rki-mai/wb-landing-builder/configs"
 	"github.com/rki-mai/wb-landing-builder/storage"
-
-	_ "github.com/rki-mai/wb-landing-builder/docs"
-
-	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 func main() {
@@ -46,48 +24,69 @@ func main() {
 	log.Printf("Starting Landing Builder API on port: %s", cfg.Port)
 	log.Printf("Environment: %s", cfg.Environment)
 
-	log.Print(cfg.GetMongoURI(), " ", cfg.DBConfig.Database)
-
-	draftRepository, err := storage.NewDraftRepository(cfg.GetMongoURI(), cfg.DBConfig.Database, cfg.DBConfig.TtlDays)
+	draftRepository, err := storage.NewDraftRepository(
+		cfg.GetMongoURI(),
+		cfg.DBConfig.Database,
+		cfg.DBConfig.TtlDays,
+	)
 	if err != nil {
 		log.Fatalf("Failed to init draft repository: %v", err)
 	}
 
-	authRepository, err := auth.NewAuthRepository(cfg.GetMongoURI(), cfg.DBConfig.Database)
+	authRepository, err := auth.NewAuthRepository(
+		cfg.GetMongoURI(),
+		cfg.DBConfig.Database,
+	)
 	if err != nil {
 		log.Fatalf("Failed to init auth repository: %v", err)
 	}
 
-	draftHandler, err := storage.NewDraftHandler(storage.NewDraftService(draftRepository, cfg), cfg)
+	authService := auth.NewAuthService(authRepository, cfg)
+	draftService := storage.NewDraftService(draftRepository, cfg)
+
+	authHandler := auth.NewAuthHandler(authService)
+	draftHandler, err := storage.NewDraftHandler(draftService, cfg)
 	if err != nil {
 		log.Fatalf("Draft handler creation failed: %v", err)
 	}
 
-	authService := auth.NewAuthService(authRepository, cfg)
+	router := chi.NewMux()
 
-	authHandler := auth.NewAuthHandler(authService)
+	router.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 
-	authMiddleware := auth.AuthMiddleware(authService)
+	router.Use(auth.AuthMiddleware(authService))
 
-	mux := http.NewServeMux()
+	api := humachi.New(router, config.GetHumaConfig(cfg.ServerUrl+":"+cfg.Port))
 
-	authHandler.RegisterRoutes(mux, authMiddleware)
-	draftHandler.RegisterRoutes(mux, authMiddleware)
+	authHandler.RegisterRoutes(api)
+	draftHandler.RegisterRoutes(api)
 
-	mux.Handle("/swagger/", httpSwagger.Handler(
-		httpSwagger.URL("/swagger/doc.json"),
-	))
+	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status":"ok"}`))
+	})
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      mux,
+		Handler:      router,
 		ReadTimeout:  cfg.ReadTimeout,
 		WriteTimeout: cfg.WriteTimeout,
-		IdleTimeout:  60 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	go func() {
 		log.Printf("Server is running on http://localhost:%s", cfg.Port)
+		log.Printf("Huma UI: http://localhost:%s/docs", cfg.Port)
+		log.Printf("OpenAPI JSON: http://localhost:%s/openapi.json", cfg.Port)
+		log.Printf("Health check: http://localhost:%s/health", cfg.Port)
+
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)
 		}
@@ -103,7 +102,7 @@ func main() {
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		log.Printf("Server forced to shutdown: %v", err)
 	}
 
 	if err := draftRepository.Close(ctx); err != nil {

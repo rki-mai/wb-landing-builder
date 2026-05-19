@@ -12,6 +12,7 @@ import (
 )
 
 type Config struct {
+	ServerUrl   string
 	Port        string
 	Environment string
 	LogLevel    string
@@ -38,7 +39,7 @@ type DatabaseConfig struct {
 }
 
 func Load() *Config {
-	if err := godotenv.Load("/app/config/.env"); err != nil {
+	if err := godotenv.Load("/app/configs/.env"); err != nil {
 		log.Println("No .env file found, using environment variables")
 	}
 
@@ -54,6 +55,7 @@ func Load() *Config {
 	refreshTokenExpiration, _ := time.ParseDuration(getEnv("REFRESH_TOKEN_EXPIRATION", "168h"))
 
 	return &Config{
+		ServerUrl:              getEnv("SERVER_URL", "http://localhost"),
 		Port:                   getEnv("PORT", "8080"),
 		Environment:            getEnv("ENVIRONMENT", "production"),
 		LogLevel:               getEnv("LOG_LEVEL", "info"),
