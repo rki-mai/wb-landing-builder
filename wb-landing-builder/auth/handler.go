@@ -1,8 +1,10 @@
 package auth
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
+
+	"github.com/danielgtaylor/huma/v2"
 )
 
 type Handler struct {
@@ -13,155 +15,108 @@ func NewAuthHandler(svc *AuthService) *Handler {
 	return &Handler{service: svc}
 }
 
-// RegisterRoutes регистрирует маршруты аутентификации.
-func (h *Handler) RegisterRoutes(mux *http.ServeMux, middleware func(http.Handler) http.Handler) {
-	mux.HandleFunc("POST /api/v1/auth/register", h.register)
-	mux.HandleFunc("POST /api/v1/auth/login", h.login)
-	mux.HandleFunc("POST /api/v1/auth/refresh", h.refresh)
+func (h *Handler) RegisterRoutes(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "register",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/auth/register",
+		Summary:     "Register",
+		Tags:        []string{"Auth"},
+		Security:    []map[string][]string{},
+	}, h.register)
 
-	mux.Handle("GET /api/v1/auth/me", middleware(http.HandlerFunc(h.me)))
+	huma.Register(api, huma.Operation{
+		OperationID: "login",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/auth/login",
+		Summary:     "Login",
+		Tags:        []string{"Auth"},
+		Security:    []map[string][]string{},
+	}, h.login)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "refresh",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/auth/refresh",
+		Summary:     "Refresh Tokens",
+		Tags:        []string{"Auth"},
+		Security:    []map[string][]string{},
+	}, h.refresh)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "me",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/auth/me",
+		Summary:     "My Profile",
+		Tags:        []string{"Auth"},
+		Security:    []map[string][]string{{"BearerAuth": {}}},
+	}, h.me)
 }
 
-// Register регистрирует нового пользователя.
-// @Summary Регистрация
-// @Description Создает нового пользователя и возвращает его ID и email.
-// @Tags Auth
-// @Accept json
-// @Produce json
-// @Param request body RegisterRequest true "Данные для регистрации"
-// @Success 201 {object} Me "ID и email созданного пользователя"
-// @Failure 400 {object} ErrorResponse "Ошибка валидации или формата"
-// @Failure 409 {object} ErrorResponse "Пользователь уже существует"
-// @Failure 500 {object} ErrorResponse "Внутренняя ошибка сервера"
-// @Router /api/v1/auth/register [post]
-func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
-	var req RegisterRequest
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid request body")
-		return
+func (h *Handler) register(ctx context.Context, req *RegisterRequest) (*RegisterResponse, error) {
+	if req.Body.Email == "" || req.Body.Password == "" {
+		return nil, huma.Error400BadRequest("email and password required")
 	}
 
-	if req.Email == "" || req.Password == "" {
-		writeJSONError(w, http.StatusBadRequest, "email and password required")
-		return
-	}
-
-	user, err := h.service.Register(r.Context(), req.Email, req.Password)
+	user, err := h.service.Register(ctx, req.Body.Email, req.Body.Password)
 	if err != nil {
 		if err.Error() == "user already exists" {
-			writeJSONError(w, http.StatusConflict, err.Error())
-			return
+			return nil, huma.Error409Conflict(err.Error())
 		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to register")
-		return
+		return nil, huma.Error500InternalServerError("failed to register")
 	}
 
-	writeJSONResponse(w, http.StatusCreated, map[string]string{
-		"id":    user.ID,
-		"email": user.Email,
-	})
+	return &RegisterResponse{
+		Body: struct {
+			ID    string `json:"id" example:"507f1f77bcf86cd799439011" doc:"User ID"`
+			Email string `json:"email" example:"user@example.com" doc:"User email"`
+		}{
+			ID:    user.ID,
+			Email: user.Email,
+		},
+	}, nil
 }
 
-// Login выполняет вход в систему.
-// @Summary Вход
-// @Description Аутентифицирует пользователя и возвращает токены доступа.
-// @Tags Auth
-// @Accept json
-// @Produce json
-// @Param request body LoginRequest true "Данные для входа"
-// @Success 200 {object} TokenResponse "Токены доступа"
-// @Failure 400 {object} ErrorResponse "Неверный формат запроса"
-// @Failure 401 {object} ErrorResponse "Неверные учетные данные"
-// @Router /api/v1/auth/login [post]
-func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
-	var req LoginRequest
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-
-	tokens, err := h.service.Login(r.Context(), req.Email, req.Password)
+func (h *Handler) login(ctx context.Context, req *LoginRequest) (*TokenResponse, error) {
+	tokens, err := h.service.Login(ctx, req.Body.Email, req.Body.Password)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "invalid credentials")
-		return
+		return nil, huma.Error401Unauthorized("invalid credentials")
 	}
 
-	writeJSONResponse(w, http.StatusOK, tokens)
+	return tokens, nil
 }
 
-// Refresh обновляет токены доступа.
-// @Summary Обновление токенов
-// @Description Обновляет пару токенов, используя refresh токен.
-// @Tags Auth
-// @Accept json
-// @Produce json
-// @Param request body RefreshRequest true "Refresh токен"
-// @Success 200 {object} TokenResponse "Новая пара токенов"
-// @Failure 400 {object} ErrorResponse "Отсутствует refresh токен"
-// @Failure 401 {object} ErrorResponse "Невалидный refresh токен"
-// @Router /api/v1/auth/refresh [post]
-func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
-	var req RefreshRequest
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid request body")
-		return
+func (h *Handler) refresh(ctx context.Context, req *RefreshRequest) (*TokenResponse, error) {
+	if req.Body.RefreshToken == "" {
+		return nil, huma.Error400BadRequest("refresh_token required")
 	}
 
-	if req.RefreshToken == "" {
-		writeJSONError(w, http.StatusBadRequest, "refresh_token required")
-		return
-	}
-
-	tokens, err := h.service.Refresh(r.Context(), req.RefreshToken)
+	tokens, err := h.service.Refresh(ctx, req.Body.RefreshToken)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "invalid refresh token")
-		return
+		return nil, huma.Error401Unauthorized("invalid refresh token")
 	}
 
-	writeJSONResponse(w, http.StatusOK, tokens)
+	return tokens, nil
 }
 
-// Me получает информацию о текущем пользователе.
-// @Summary Мой профиль
-// @Description Возвращает ID и email авторизованного пользователя.
-// @Tags Auth
-// @Accept json
-// @Produce json
-// @Security BearerAuth
-// @Success 200 {object} Me "ID и email пользователя"
-// @Failure 401 {object} ErrorResponse "Не авторизован или пользователь не найден"
-// @Router /api/v1/auth/me [get]
-func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
-	userID, ok := r.Context().Value(UserIDKey).(string)
+func (h *Handler) me(ctx context.Context, req *struct{}) (*MeResponse, error) {
+	userID, ok := ctx.Value(UserContextKey).(string)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
-		return
+		return nil, huma.Error401Unauthorized("unauthorized")
 	}
 
-	user, err := h.service.GetUserByID(r.Context(), userID)
+	user, err := h.service.GetUserByID(ctx, userID)
 	if err != nil || user == nil {
-		writeJSONError(w, http.StatusUnauthorized, "user not found")
-		return
+		return nil, huma.Error401Unauthorized("user not found")
 	}
 
-	writeJSONResponse(w, http.StatusOK, map[string]string{
-		"id":    user.ID,
-		"email": user.Email,
-	})
-}
-
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	writeJSONResponse(w, status, map[string]string{"error": message})
-}
-
-func writeJSONResponse(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-	}
+	return &MeResponse{
+		Body: struct {
+			ID    string `json:"id" example:"507f1f77bcf86cd799439011" doc:"User ID"`
+			Email string `json:"email" example:"user@example.com" doc:"User email"`
+		}{
+			ID:    user.ID,
+			Email: user.Email,
+		},
+	}, nil
 }

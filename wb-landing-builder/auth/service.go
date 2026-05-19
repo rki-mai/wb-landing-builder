@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/rki-mai/wb-landing-builder/config"
+	config "github.com/rki-mai/wb-landing-builder/configs"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -121,9 +121,15 @@ func (s *AuthService) generateTokens(ctx context.Context, userID string) (*Token
 	}
 
 	return &TokenResponse{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		ExpiresIn:    int64(s.accessTTL.Seconds()),
+		Body: struct {
+			AccessToken  string `json:"access_token" example:"eyJhbGciOiJIUzI1..." doc:"JWT access token"`
+			RefreshToken string `json:"refresh_token" example:"eyJhbGciOiJIUzI1..." doc:"JWT refresh token"`
+			ExpiresIn    int64  `json:"expires_in" example:"3600" doc:"Token expiration time in seconds"`
+		}{
+			AccessToken:  accessToken,
+			RefreshToken: refreshToken,
+			ExpiresIn:    int64(s.accessTTL.Seconds()),
+		},
 	}, nil
 }
 

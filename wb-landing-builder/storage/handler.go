@@ -1,31 +1,28 @@
 package storage
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/danielgtaylor/huma/v2"
 	"github.com/xeipuuv/gojsonschema"
 
-	"github.com/rki-mai/wb-landing-builder/config"
+	config "github.com/rki-mai/wb-landing-builder/configs"
 )
 
-// MaxBodySize ограничивает размер тела запроса в 1 МБ
 const MaxBodySize = 1 << 20
 
-// DraftHandler обрабатывает HTTP-запросы, связанные с черновиками страниц.
 type DraftHandler struct {
 	service     DraftService
 	schema      *gojsonschema.Schema
 	rateLimiter *RateLimiter
 }
 
-// RateLimiter реализует алгоритм скользящего окна для ограничения частоты запросов.
 type RateLimiter struct {
 	mu            sync.RWMutex
 	requests      map[string][]time.Time
@@ -124,86 +121,57 @@ func NewDraftHandler(svc DraftService, cfg *config.Config) (*DraftHandler, error
 	}, nil
 }
 
-// RegisterRoutes регистрирует маршруты для обработчика черновиков.
-func (h *DraftHandler) RegisterRoutes(
-	mux *http.ServeMux,
-	middleware func(http.Handler) http.Handler,
-) {
-	mux.Handle(
-		"POST /api/v1/storage/{project_id}/mutations",
-		middleware(http.HandlerFunc(h.applyMutation)),
-	)
-	mux.Handle(
-		"GET /api/v1/storage/{project_id}",
-		middleware(http.HandlerFunc(h.sendLatestPage)),
-	)
-	mux.Handle(
-		"GET /api/v1/storage/{project_id}/versions/{version}",
-		middleware(http.HandlerFunc(h.sendPage)),
-	)
+func (h *DraftHandler) RegisterRoutes(api huma.API) {
+	huma.Register(api, huma.Operation{
+		OperationID: "applyMutation",
+		Method:      http.MethodPost,
+		Path:        "/api/v1/storage/{project_id}/mutations",
+		Summary:     "Apply mutation",
+		Tags:        []string{"Storage"},
+	}, h.applyMutation)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "getLatestDraft",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/storage/{project_id}",
+		Summary:     "Get latest draft",
+		Tags:        []string{"Storage"},
+	}, h.sendLatestPage)
+
+	huma.Register(api, huma.Operation{
+		OperationID: "getDraftByVersion",
+		Method:      http.MethodGet,
+		Path:        "/api/v1/storage/{project_id}/versions/{version}",
+		Summary:     "Get draft by version",
+		Tags:        []string{"Storage"},
+	}, h.sendPage)
 }
 
-func (h *DraftHandler) handleLimit(w http.ResponseWriter, projectID string) bool {
-	allowed, _, retryAfter := h.rateLimiter.Allow(projectID)
+func (h *DraftHandler) applyMutation(ctx context.Context, input *applyMutationInput) (*ApplyMutationResponse, error) {
+	if input.ProjectID == "" {
+		return nil, huma.Error400BadRequest("invalid URI: missing project_id")
+	}
+
+	allowed, _, retryAfter := h.rateLimiter.Allow(input.ProjectID)
 	if !allowed {
-		w.Header().Set("X-RateLimit-Limit", strconv.Itoa(h.rateLimiter.limit))
-		w.Header().Set("X-RateLimit-Remaining", "0")
-		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(retryAfter).Unix(), 10))
-		w.Header().Set("Retry-After", strconv.FormatInt(int64(retryAfter.Seconds()), 10))
-
-		writeJSONError(w, http.StatusTooManyRequests,
-			fmt.Sprintf("rate limit exceeded. Limit: %d requests per %v. Retry after: %v",
-				h.rateLimiter.limit, h.rateLimiter.window, retryAfter))
-		return false
-	}
-	return true
-}
-
-// ApplyMutation применяет мутацию к черновику страницы проекта.
-// @Summary Применить мутацию
-// @Description Применяет JSON-мутацию к указанному проекту после проверки схемы и лимитов.
-// @Tags Storage
-// @Accept json
-// @Security BearerAuth
-// @Produce json
-// @Param project_id path string true "ID проекта"
-// @Param mutation body Mutation true "Объект мутации"
-// @Success 200 {object} ErrorResponse "Успешное применение, возвращает версию"
-// @Failure 400 {object} ErrorResponse "Ошибка валидации или неверный запрос"
-// @Failure 413 {object} ErrorResponse "Превышен размер payload"
-// @Failure 429 {object} ErrorResponse "Превышен лимит запросов"
-// @Failure 500 {object} ErrorResponse "Внутренняя ошибка сервера"
-// @Router /api/v1/storage/{project_id}/mutations [post]
-func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
-	projectID := r.PathValue("project_id")
-
-	if projectID == "" {
-		writeJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
-		return
+		return nil, huma.Error429TooManyRequests(fmt.Sprintf(
+			"rate limit exceeded. Limit: %d requests per %v. Retry after: %v",
+			h.rateLimiter.limit, h.rateLimiter.window, retryAfter))
 	}
 
-	if !h.handleLimit(w, projectID) {
-		return
-	}
-
-	r.Body = http.MaxBytesReader(w, r.Body, MaxBodySize)
-
-	body, err := io.ReadAll(r.Body)
+	bodyBytes, err := json.Marshal(input.Body)
 	if err != nil {
-		var maxBytesErr *http.MaxBytesError
-		if errors.As(err, &maxBytesErr) {
-			writeJSONError(w, http.StatusRequestEntityTooLarge, "payload too large")
-			return
-		}
-		writeJSONError(w, http.StatusBadRequest, "failed to read body")
-		return
+		return nil, huma.Error400BadRequest("failed to marshal mutation: " + err.Error())
 	}
 
-	documentLoader := gojsonschema.NewBytesLoader(body)
+	if len(bodyBytes) > MaxBodySize {
+		return nil, huma.Error413RequestEntityTooLarge("payload too large")
+	}
+
+	documentLoader := gojsonschema.NewBytesLoader(bodyBytes)
 	result, err := h.schema.Validate(documentLoader)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("failed to perform json validation: %s", err))
-		return
+		return nil, huma.Error400BadRequest(fmt.Sprintf("failed to perform json validation: %s", err))
 	}
 
 	if !result.Valid() {
@@ -211,101 +179,51 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 		for i, desc := range result.Errors() {
 			output += fmt.Sprintf("\t%d: %s\n", i+1, desc)
 		}
-		writeJSONError(w, http.StatusBadRequest, output)
-		return
+		return nil, huma.Error400BadRequest(output)
 	}
 
-	var mutation Mutation
-	if err := json.Unmarshal(body, &mutation); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid mutation payload: "+err.Error())
-		return
-	}
-
-	version, err := h.service.ApplyMutation(r.Context(), projectID, mutation)
+	version, err := h.service.ApplyMutation(ctx, input.ProjectID, input.Body)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to apply mutation: "+err.Error())
-		return
+		return nil, huma.Error500InternalServerError("failed to apply mutation: " + err.Error())
 	}
 
-	writeJSONResponse(w, http.StatusOK, map[string]string{"status": "ok", "version": strconv.FormatInt(int64(version), 10)})
+	return &ApplyMutationResponse{
+		Body: struct {
+			Status  string `json:"status" example:"success" doc:"Operation status"`
+			Version string `json:"version" example:"1" doc:"Current version after mutation"`
+		}{
+			Status:  "ok",
+			Version: strconv.FormatInt(int64(version), 10),
+		},
+	}, nil
 }
 
-// GetLatestDraft получает последнюю версию черновика страницы.
-// @Summary Получить последний черновик
-// @Description Возвращает актуальную версию страницы для указанного проекта.
-// @Tags Storage
-// @Accept json
-// @Security BearerAuth
-// @Produce json
-// @Param project_id path string true "ID проекта"
-// @Success 200 {object} Mutation "JSON контент страницы"
-// @Failure 400 {object} ErrorResponse "Отсутствует project_id"
-// @Failure 500 {object} ErrorResponse "Ошибка получения данных"
-// @Router /api/v1/storage/{project_id} [get]
-func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
-	projectID := r.PathValue("project_id")
-	if projectID == "" {
-		writeJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
-		return
+func (h *DraftHandler) sendLatestPage(ctx context.Context, input *getLatestDraftInput) (*GetDraftResponse, error) {
+	if input.ProjectID == "" {
+		return nil, huma.Error400BadRequest("invalid URI: missing project_id")
 	}
 
-	page, err := h.service.GetLatestDraft(r.Context(), projectID)
+	page, err := h.service.GetLatestDraft(ctx, input.ProjectID)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to get page: "+err.Error())
-		return
+		return nil, huma.Error500InternalServerError("failed to get page: " + err.Error())
 	}
 
-	writeJSONResponse(w, http.StatusOK, page)
+	return &GetDraftResponse{Body: Draft{Mutations: string(page)}}, nil
 }
 
-// GetDraftByVersion получает конкретную версию черновика страницы.
-// @Summary Получить версию черновика
-// @Description Возвращает страницу указанной версии для проекта.
-// @Tags Storage
-// @Accept json
-// @Security BearerAuth
-// @Produce json
-// @Param project_id path string true "ID проекта"
-// @Param version path int true "Номер версии"
-// @Success 200 {object} string "JSON контент страницы"
-// @Failure 400 {object} ErrorResponse "Неверный ID или версия"
-// @Failure 500 {object} ErrorResponse "Ошибка получения данных"
-// @Router /api/v1/storage/{project_id}/versions/{version} [get]
-func (h *DraftHandler) sendPage(w http.ResponseWriter, r *http.Request) {
-	projectID := r.PathValue("project_id")
-	version, err := strconv.Atoi(r.PathValue("version"))
-
-	if projectID == "" {
-		writeJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
-		return
+func (h *DraftHandler) sendPage(ctx context.Context, input *getDraftByVersionInput) (*GetDraftResponse, error) {
+	if input.ProjectID == "" {
+		return nil, huma.Error400BadRequest("invalid URI: missing project_id")
 	}
+
+	if input.Version <= 0 {
+		return nil, huma.Error400BadRequest("invalid URI: invalid version")
+	}
+
+	page, err := h.service.GetDraft(ctx, input.ProjectID, input.Version)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid URI: invalid version")
-		return
+		return nil, huma.Error500InternalServerError("failed to get page: " + err.Error())
 	}
 
-	page, err := h.service.GetDraft(r.Context(), projectID, version)
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to get page: "+err.Error())
-		return
-	}
-
-	writeJSONResponse(w, http.StatusOK, page)
-}
-
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	writeJSONResponse(w, status, map[string]string{"error": message})
-}
-
-func writeJSONResponse(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	switch v := data.(type) {
-	case []byte:
-		w.Write(v)
-	default:
-		if err := json.NewEncoder(w).Encode(data); err != nil {
-			http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		}
-	}
+	return &GetDraftResponse{Body: Draft{Mutations: string(page)}}, nil
 }
