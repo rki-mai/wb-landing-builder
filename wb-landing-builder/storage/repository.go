@@ -13,7 +13,7 @@ import (
 
 type DraftRepository interface {
 	GetDraft(ctx context.Context, projectID string, version int) (bson.M, error)
-	InsertDraft(ctx context.Context, projectID string, owner_id string, draft []bson.M, version int) error
+	InsertDraft(ctx context.Context, projectID string, ownerID string, draft []bson.M, version int) error
 
 	GetDraftOwner(ctx context.Context, projectID string) (string, error)
 	GetLatestMutationForID(ctx context.Context, projectID string, elementID string) (bson.M, error)
