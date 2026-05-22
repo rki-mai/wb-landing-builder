@@ -13,12 +13,13 @@ import (
 
 type DraftRepository interface {
 	GetDraft(ctx context.Context, projectID string, version int) (bson.M, error)
-	InsertDraft(ctx context.Context, projectID string, draft []bson.M, version int) error
+	InsertDraft(ctx context.Context, projectID string, ownerID string, draft []bson.M, version int) error
 
+	GetDraftOwner(ctx context.Context, projectID string) (string, error)
 	GetLatestMutationForID(ctx context.Context, projectID string, elementID string) (bson.M, error)
 	GetLatestMutationVersion(ctx context.Context, projectID string) (int, error)
 	GetMutationsInRange(ctx context.Context, projectID string, from int, to int) (*[]bson.M, error)
-	InsertMutation(ctx context.Context, projectID string, mutation bson.M) (int, error)
+	InsertMutation(ctx context.Context, projectID string, ownerID string, mutation bson.M) (int, error)
 
 	Close(ctx context.Context) error
 }
@@ -127,13 +128,14 @@ func (r *draftRepository) GetDraft(ctx context.Context, projectID string, versio
 	return draft, nil
 }
 
-func (r *draftRepository) InsertDraft(ctx context.Context, projectID string, mutations []bson.M, version int) error {
+func (r *draftRepository) InsertDraft(ctx context.Context, projectID string, ownerID string, mutations []bson.M, version int) error {
 	draft := bson.M{
 		"project_id": projectID,
+		"owner_id":   ownerID,
 		"version":    version,
 		"created_at": time.Now(),
+		"mutations":  mutations,
 	}
-	draft["mutations"] = mutations
 
 	_, err := r.draftsCollection.InsertOne(ctx, draft)
 	if err != nil {
@@ -141,6 +143,24 @@ func (r *draftRepository) InsertDraft(ctx context.Context, projectID string, mut
 	}
 
 	return nil
+}
+
+func (r *draftRepository) GetDraftOwner(ctx context.Context, projectID string) (string, error) {
+	filter := bson.M{
+		"project_id": projectID,
+	}
+	opts := options.FindOne().SetSort(bson.D{{Key: "version", Value: 1}})
+	var result struct {
+		OwnerID string `bson:"owner_id"`
+	}
+	err := r.mutationsCollection.FindOne(ctx, filter, opts).Decode(&result)
+	if err == mongo.ErrNoDocuments {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return result.OwnerID, nil
 }
 
 func (r *draftRepository) GetLatestMutationForID(ctx context.Context, projectID string, elementID string) (bson.M, error) {
@@ -206,13 +226,14 @@ func (r *draftRepository) GetMutationsInRange(ctx context.Context, projectID str
 	return &mutations, nil
 }
 
-func (r *draftRepository) InsertMutation(ctx context.Context, projectID string, mutation bson.M) (int, error) {
+func (r *draftRepository) InsertMutation(ctx context.Context, projectID string, ownerID string, mutation bson.M) (int, error) {
 	latestVersion, err := r.GetLatestMutationVersion(ctx, projectID)
 	if err != nil {
 		return 0, err
 	}
 
 	mutation["project_id"] = projectID
+	mutation["owner_id"] = ownerID
 	mutation["version"] = latestVersion + 1
 	mutation["created_at"] = time.Now()
 
