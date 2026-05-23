@@ -54,7 +54,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusConflict, err.Error())
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to register")
+		writeJSONError(w, http.StatusInternalServerError, "failed to register: "+err.Error())
 		return
 	}
 
@@ -89,7 +89,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to login")
+		writeJSONError(w, http.StatusInternalServerError, "failed to login: "+err.Error())
 		return
 	}
 
@@ -126,7 +126,7 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to refresh")
+		writeJSONError(w, http.StatusInternalServerError, "failed to refresh: "+err.Error())
 		return
 	}
 
@@ -156,7 +156,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to get user")
+		writeJSONError(w, http.StatusInternalServerError, "failed to get user: "+err.Error())
 		return
 	}
 
