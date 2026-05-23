@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 )
 
@@ -49,11 +50,11 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.service.Register(r.Context(), req.Email, req.Password)
 	if err != nil {
-		if err.Error() == "user already exists" {
+		if errors.Is(err, ErrUserAlreadyExists) {
 			writeJSONError(w, http.StatusConflict, err.Error())
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to register")
+		writeJSONError(w, http.StatusInternalServerError, "failed to register: "+err.Error())
 		return
 	}
 
@@ -84,7 +85,11 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 
 	tokens, err := h.service.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "invalid credentials")
+		if errors.Is(err, ErrInvalidCredentials) {
+			writeJSONError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to login: "+err.Error())
 		return
 	}
 
@@ -117,7 +122,11 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 
 	tokens, err := h.service.Refresh(r.Context(), req.RefreshToken)
 	if err != nil {
-		writeJSONError(w, http.StatusUnauthorized, "invalid refresh token")
+		if errors.Is(err, ErrInvalidRefreshToken) || errors.Is(err, ErrRefreshTokenExpired) {
+			writeJSONError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to refresh: "+err.Error())
 		return
 	}
 
@@ -142,8 +151,12 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.service.GetUserByID(r.Context(), userID)
-	if err != nil || user == nil {
-		writeJSONError(w, http.StatusUnauthorized, "user not found")
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			writeJSONError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		writeJSONError(w, http.StatusInternalServerError, "failed to get user: "+err.Error())
 		return
 	}
 

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 )
@@ -18,13 +19,13 @@ func AuthMiddleware(
 
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				http.Error(w, "missing Authorization header", http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "missing Authorization header")
 				return
 			}
 
 			parts := strings.Fields(authHeader)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				http.Error(w, "invalid Authorization header", http.StatusUnauthorized)
+				writeJSONError(w, http.StatusUnauthorized, "invalid Authorization header")
 				return
 			}
 
@@ -32,7 +33,11 @@ func AuthMiddleware(
 
 			userID, err := authService.GetUserFromToken(token)
 			if err != nil {
-				http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+				if errors.Is(err, ErrInvalidToken) || errors.Is(err, ErrInvalidClaims) || errors.Is(err, ErrUnexpectedSigningMethod) {
+					writeJSONError(w, http.StatusUnauthorized, err.Error())
+					return
+				}
+				writeJSONError(w, http.StatusInternalServerError, "internal server error")
 				return
 			}
 
