@@ -168,11 +168,22 @@ func (s *DraftService) GetDraft(ctx context.Context, projectID string, userID st
 	if err := s.checkOwnership(ctx, projectID, userID); err != nil {
 		return nil, err
 	}
-	mutations, err := s.collapseMutations(ctx, projectID, version)
+	elements, err := s.collapseMutations(ctx, projectID, version)
 	if err != nil {
 		return nil, err
 	}
-	jsonData, err := json.Marshal(mutations)
+	actualVersion := version
+	if version == math.MaxInt {
+		actualVersion = getMaxVersion(elements)
+	}
+	response := struct {
+		Version  int      `json:"version"`
+		Elements []bson.M `json:"elements"`
+	}{
+		Version:  actualVersion,
+		Elements: elements,
+	}
+	jsonData, err := json.Marshal(response)
 	if err != nil {
 		return nil, err
 	}
@@ -185,4 +196,17 @@ func (s *DraftService) GetLatestDraft(ctx context.Context, projectID string, use
 		return nil, err
 	}
 	return jsonData, nil
+}
+
+func getMaxVersion(elements []bson.M) int {
+	if len(elements) == 0 {
+		return 0
+	}
+	maxV := elements[0]["version"].(int32)
+	for _, e := range elements[1:] {
+		if e["version"].(int32) > maxV {
+			maxV = e["version"].(int32)
+		}
+	}
+	return int(maxV)
 }
