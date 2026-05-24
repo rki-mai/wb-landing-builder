@@ -73,6 +73,47 @@ services:
         condition: service_completed_successfully
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8081/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  minio:
+    image: minio/minio:latest
+    container_name: landing-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - miniodata:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: "no"
+    entrypoint: >
+      sh -c "
+        until mc alias set local http://minio:9000 minioadmin minioadmin 2>/dev/null; do sleep 2; done &&
+        mc mb -p local/publications || true
+      "
 
   wb-landing-builder:
     build: .
@@ -95,14 +136,35 @@ services:
       - MONGO_DATABASE=storage
       - MONGO_MAX_CONNECTIONS=100
       - MONGO_TTL_DAYS=30
+      - S3_ENDPOINT=http://minio:9000
+      - S3_REGION=us-east-1
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET=publications
+      - S3_USE_PATH_STYLE=true
+      - PUBLISHING_CLI_PATH=/app/cli/generate.py
     depends_on:
       mongo-init:
         condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+      mongo:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/swagger/doc.json >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   mongodata:
+    driver: local
+  miniodata:
     driver: local
 
 networks:

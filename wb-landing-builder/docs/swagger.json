@@ -199,6 +199,139 @@
                 }
             }
         },
+        "/api/v1/publications": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Загружает последний черновик из storage, рендерит HTML и сохраняет bundle в объектное хранилище.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Publications"
+                ],
+                "summary": "Создать публикацию",
+                "parameters": [
+                    {
+                        "description": "ID проекта для публикации",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/publishing.CreatePublicationRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.Publication"
+                        }
+                    },
+                    "400": {
+                        "description": "Неверный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Требуется авторизация",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/publications/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Publications"
+                ],
+                "summary": "Получить публикацию",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID публикации",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.Publication"
+                        }
+                    },
+                    "404": {
+                        "description": "Публикация не найдена",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "Publications"
+                ],
+                "summary": "Удалить публикацию",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID публикации",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/storage/{project_id}": {
             "get": {
                 "security": [
@@ -460,6 +593,56 @@
                     "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
                 }
             }
+        },
+        "publishing.CreatePublicationRequest": {
+            "type": "object",
+            "properties": {
+                "project_id": {
+                    "type": "string",
+                    "example": "my-project"
+                }
+            }
+        },
+        "publishing.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "описание ошибки..."
+                }
+            }
+        },
+        "publishing.Publication": {
+            "type": "object",
+            "properties": {
+                "assets_path": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "project_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "$ref": "#/definitions/publishing.PublicationStatus"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "publishing.PublicationStatus": {
+            "type": "string",
+            "enum": [
+                "FINISHED"
+            ],
+            "x-enum-varnames": [
+                "StatusFinished"
+            ]
         },
         "storage.ErrorResponse": {
             "type": "object",
