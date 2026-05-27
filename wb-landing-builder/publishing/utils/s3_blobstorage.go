@@ -41,7 +41,7 @@ func NewS3BlobStorage(ctx context.Context, cfg config.S3Config) (*S3BlobStorage,
 
 	_, err := client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: aws.String(cfg.Bucket)})
 	if err != nil {
-		return storage, fmt.Errorf("head bucket %q: %w", cfg.Bucket, err)
+		return storage, fmt.Errorf("failed to head bucket %q: %w", cfg.Bucket, err)
 	}
 
 	return storage, nil
@@ -60,7 +60,7 @@ func (s *S3BlobStorage) PutBundle(ctx context.Context, bundleKey string, blobs [
 			ContentType: aws.String(blob.ContentType),
 		}
 		if _, err := s.client.PutObject(ctx, input); err != nil {
-			return fmt.Errorf("put object %s: %w", blob.Path, err)
+			return fmt.Errorf("failed to put object %s: %w", blob.Path, err)
 		}
 	}
 	return nil
@@ -80,7 +80,7 @@ func (s *S3BlobStorage) DeleteBundle(ctx context.Context, bundleKey string) erro
 			ContinuationToken: continuation,
 		})
 		if err != nil {
-			return fmt.Errorf("list objects: %w", err)
+			return fmt.Errorf("failed to list objects: %w", err)
 		}
 
 		if len(listOut.Contents) == 0 {
@@ -97,7 +97,7 @@ func (s *S3BlobStorage) DeleteBundle(ctx context.Context, bundleKey string) erro
 			Delete: &types.Delete{Objects: objects, Quiet: aws.Bool(true)},
 		})
 		if err != nil {
-			return fmt.Errorf("delete objects: %w", err)
+			return fmt.Errorf("failed to delete objects: %w", err)
 		}
 
 		if !aws.ToBool(listOut.IsTruncated) {

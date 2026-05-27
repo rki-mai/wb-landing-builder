@@ -24,6 +24,7 @@ publishing/
     ├── blobstorage.go    # интерфейс BlobStorage
     ├── s3_blobstorage.go # реализация S3 / MinIO
     ├── renderer.go       # рендер JSON → HTML (CLI)
+    ├── draft.go          # снимок Draft (парсинг BSON/JSON)
     ├── draft_reader.go   # чтение черновика из storage
     └── httputil.go       # JSON-ответы
 ```
@@ -36,9 +37,10 @@ publishing/
 
 | Метод | Путь | Описание |
 |-------|------|----------|
-| `POST` | `/api/v1/publications` | Создать публикацию по `project_id` |
-| `GET` | `/api/v1/publications/{id}` | Получить метаданные |
-| `DELETE` | `/api/v1/publications/{id}` | Удалить публикацию и bundle в S3 |
+| `GET` | `/api/v1/storage/{project_id}/publications` | Список ID публикаций проекта |
+| `POST` | `/api/v1/storage/{project_id}/publications` | Создать публикацию по последнему черновику проекта |
+| `GET` | `/api/v1/storage/{project_id}/publications/{id}` | Получить метаданные |
+| `DELETE` | `/api/v1/storage/{project_id}/publications/{id}` | Удалить публикацию и bundle в S3 |
 
 Документация в Swagger: http://localhost:8080/swagger/index.html (тег **Publications**).
 
@@ -89,7 +91,7 @@ docker compose up -d --build wb-landing-builder
 2. **Auth** → `POST /api/v1/auth/register` и `POST /api/v1/auth/login`
 3. **Authorize** → `Bearer <access_token>`
 4. **Storage** — собрать черновик для `demo-project` (см. ниже)
-5. **Publications** → `POST /api/v1/publications` с телом `{ "project_id": "demo-project" }`
+5. **Publications** → `POST /api/v1/storage/demo-project/publications`
 6. В MinIO Console (http://localhost:9001, `minioadmin` / `minioadmin`) в bucket `publications` должны появиться `index.json` и `index.html`
 
 #### Черновик в Storage (как `storage-sample.json`)

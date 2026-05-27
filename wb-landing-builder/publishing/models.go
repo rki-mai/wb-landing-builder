@@ -20,9 +20,9 @@ type Publication struct {
 	CreatedAt  time.Time         `json:"created_at" bson:"created_at"`
 }
 
-// CreatePublicationRequest — тело запроса POST /api/v1/publications.
-type CreatePublicationRequest struct {
-	ProjectID string `json:"project_id" example:"my-project"`
+// PublicationIDsResponse — список ID публикаций проекта.
+type PublicationIDsResponse struct {
+	IDs []string `json:"ids" example:"550e8400-e29b-41d4-a716-446655440000"`
 }
 
 // ErrorResponse — стандартный формат ответа об ошибке.

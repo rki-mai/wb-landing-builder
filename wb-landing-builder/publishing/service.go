@@ -33,14 +33,19 @@ func NewPublicationService(
 }
 
 func (s *PublicationService) Create(ctx context.Context, projectID string) (*Publication, error) {
-	draftJSON, err := s.drafts.GetLatestDraft(ctx, projectID)
+	draft, err := s.drafts.GetLatestDraft(ctx, projectID)
 	if err != nil {
-		return nil, fmt.Errorf("load draft: %w", err)
+		return nil, fmt.Errorf("failed to load draft: %w", err)
+	}
+
+	draftJSON, err := draft.JSON()
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode draft: %w", err)
 	}
 
 	html, err := s.render.Render(ctx, draftJSON)
 	if err != nil {
-		return nil, fmt.Errorf("render draft: %w", err)
+		return nil, fmt.Errorf("failed to render draft: %w", err)
 	}
 
 	id := uuid.NewString()
@@ -51,7 +56,7 @@ func (s *PublicationService) Create(ctx context.Context, projectID string) (*Pub
 	}
 
 	if err := s.blob.PutBundle(ctx, bundleKey, blobs); err != nil {
-		return nil, fmt.Errorf("upload bundle: %w", err)
+		return nil, fmt.Errorf("failed to upload bundle: %w", err)
 	}
 
 	pub := Publication{
@@ -65,10 +70,14 @@ func (s *PublicationService) Create(ctx context.Context, projectID string) (*Pub
 
 	if err := s.repo.Insert(ctx, pub); err != nil {
 		_ = s.blob.DeleteBundle(context.Background(), bundleKey)
-		return nil, fmt.Errorf("save publication: %w", err)
+		return nil, fmt.Errorf("failed to save publication: %w", err)
 	}
 
 	return &pub, nil
+}
+
+func (s *PublicationService) ListIDsByProject(ctx context.Context, projectID string) ([]string, error) {
+	return s.repo.ListIDsByProject(ctx, projectID)
 }
 
 func (s *PublicationService) Get(ctx context.Context, id string) (*Publication, error) {
@@ -90,7 +99,7 @@ func (s *PublicationService) Delete(ctx context.Context, id string) error {
 
 	bundleKey := "publications/" + id
 	if err := s.blob.DeleteBundle(ctx, bundleKey); err != nil {
-		return fmt.Errorf("delete bundle: %w", err)
+		return fmt.Errorf("failed to delete bundle: %w", err)
 	}
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err

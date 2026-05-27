@@ -202,139 +202,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/publications": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Загружает последний черновик из storage, рендерит HTML и сохраняет bundle в объектное хранилище.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Publications"
-                ],
-                "summary": "Создать публикацию",
-                "parameters": [
-                    {
-                        "description": "ID проекта для публикации",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/publishing.CreatePublicationRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/publishing.Publication"
-                        }
-                    },
-                    "400": {
-                        "description": "Неверный запрос",
-                        "schema": {
-                            "$ref": "#/definitions/publishing.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Требуется авторизация",
-                        "schema": {
-                            "$ref": "#/definitions/publishing.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Внутренняя ошибка сервера",
-                        "schema": {
-                            "$ref": "#/definitions/publishing.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/publications/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Publications"
-                ],
-                "summary": "Получить публикацию",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "ID публикации",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/publishing.Publication"
-                        }
-                    },
-                    "404": {
-                        "description": "Публикация не найдена",
-                        "schema": {
-                            "$ref": "#/definitions/publishing.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Внутренняя ошибка сервера",
-                        "schema": {
-                            "$ref": "#/definitions/publishing.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "tags": [
-                    "Publications"
-                ],
-                "summary": "Удалить публикацию",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "ID публикации",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "500": {
-                        "description": "Внутренняя ошибка сервера",
-                        "schema": {
-                            "$ref": "#/definitions/publishing.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/storage/{project_id}": {
             "get": {
                 "security": [
@@ -449,6 +316,186 @@ const docTemplate = `{
                         "description": "Внутренняя ошибка сервера",
                         "schema": {
                             "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/storage/{project_id}/publications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает ID всех публикаций для указанного проекта (от новых к старым).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Publications"
+                ],
+                "summary": "Список ID публикаций проекта",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID проекта",
+                        "name": "project_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Список ID публикаций",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.PublicationIDsResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Загружает последний черновик из storage, рендерит HTML и сохраняет bundle в объектное хранилище.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Publications"
+                ],
+                "summary": "Создать публикацию",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID проекта",
+                        "name": "project_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Публикация создана",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.Publication"
+                        }
+                    },
+                    "401": {
+                        "description": "Требуется авторизация",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/storage/{project_id}/publications/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Publications"
+                ],
+                "summary": "Получить публикацию",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID проекта",
+                        "name": "project_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID публикации",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Метаданные публикации",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.Publication"
+                        }
+                    },
+                    "404": {
+                        "description": "Публикация не найдена",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "tags": [
+                    "Publications"
+                ],
+                "summary": "Удалить публикацию",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID проекта",
+                        "name": "project_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID публикации",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Публикация удалена"
+                    },
+                    "404": {
+                        "description": "Публикация не найдена",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
                         }
                     }
                 }
@@ -597,15 +644,6 @@ const docTemplate = `{
                 }
             }
         },
-        "publishing.CreatePublicationRequest": {
-            "type": "object",
-            "properties": {
-                "project_id": {
-                    "type": "string",
-                    "example": "my-project"
-                }
-            }
-        },
         "publishing.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -635,6 +673,20 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "integer"
+                }
+            }
+        },
+        "publishing.PublicationIDsResponse": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "550e8400-e29b-41d4-a716-446655440000"
+                    ]
                 }
             }
         },

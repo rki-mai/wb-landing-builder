@@ -72,12 +72,6 @@ definitions:
         example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         type: string
     type: object
-  publishing.CreatePublicationRequest:
-    properties:
-      project_id:
-        example: my-project
-        type: string
-    type: object
   publishing.ErrorResponse:
     properties:
       error:
@@ -98,6 +92,15 @@ definitions:
         $ref: '#/definitions/publishing.PublicationStatus'
       version:
         type: integer
+    type: object
+  publishing.PublicationIDsResponse:
+    properties:
+      ids:
+        example:
+        - 550e8400-e29b-41d4-a716-446655440000
+        items:
+          type: string
+        type: array
     type: object
   publishing.PublicationStatus:
     enum:
@@ -253,90 +256,6 @@ paths:
       summary: Регистрация
       tags:
       - Auth
-  /api/v1/publications:
-    post:
-      consumes:
-      - application/json
-      description: Загружает последний черновик из storage, рендерит HTML и сохраняет
-        bundle в объектное хранилище.
-      parameters:
-      - description: ID проекта для публикации
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/publishing.CreatePublicationRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/publishing.Publication'
-        "400":
-          description: Неверный запрос
-          schema:
-            $ref: '#/definitions/publishing.ErrorResponse'
-        "401":
-          description: Требуется авторизация
-          schema:
-            $ref: '#/definitions/publishing.ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
-          schema:
-            $ref: '#/definitions/publishing.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Создать публикацию
-      tags:
-      - Publications
-  /api/v1/publications/{id}:
-    delete:
-      parameters:
-      - description: ID публикации
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "204":
-          description: No Content
-        "500":
-          description: Внутренняя ошибка сервера
-          schema:
-            $ref: '#/definitions/publishing.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Удалить публикацию
-      tags:
-      - Publications
-    get:
-      parameters:
-      - description: ID публикации
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/publishing.Publication'
-        "404":
-          description: Публикация не найдена
-          schema:
-            $ref: '#/definitions/publishing.ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
-          schema:
-            $ref: '#/definitions/publishing.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Получить публикацию
-      tags:
-      - Publications
   /api/v1/storage/{project_id}:
     get:
       consumes:
@@ -414,6 +333,122 @@ paths:
       summary: Применить мутацию
       tags:
       - Storage
+  /api/v1/storage/{project_id}/publications:
+    get:
+      description: Возвращает ID всех публикаций для указанного проекта (от новых
+        к старым).
+      parameters:
+      - description: ID проекта
+        in: path
+        name: project_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список ID публикаций
+          schema:
+            $ref: '#/definitions/publishing.PublicationIDsResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Список ID публикаций проекта
+      tags:
+      - Publications
+    post:
+      description: Загружает последний черновик из storage, рендерит HTML и сохраняет
+        bundle в объектное хранилище.
+      parameters:
+      - description: ID проекта
+        in: path
+        name: project_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Публикация создана
+          schema:
+            $ref: '#/definitions/publishing.Publication'
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Создать публикацию
+      tags:
+      - Publications
+  /api/v1/storage/{project_id}/publications/{id}:
+    delete:
+      parameters:
+      - description: ID проекта
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: ID публикации
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Публикация удалена
+        "404":
+          description: Публикация не найдена
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Удалить публикацию
+      tags:
+      - Publications
+    get:
+      parameters:
+      - description: ID проекта
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: ID публикации
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Метаданные публикации
+          schema:
+            $ref: '#/definitions/publishing.Publication'
+        "404":
+          description: Публикация не найдена
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Получить публикацию
+      tags:
+      - Publications
   /api/v1/storage/{project_id}/versions/{version}:
     get:
       consumes:

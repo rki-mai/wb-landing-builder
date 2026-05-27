@@ -30,7 +30,7 @@ func (r *CLIRenderer) Render(ctx context.Context, draftJSON []byte) ([]byte, err
 
 	tmpDir, err := os.MkdirTemp("", "publish-render-*")
 	if err != nil {
-		return nil, fmt.Errorf("create temp dir: %w", err)
+		return nil, fmt.Errorf("failed to create temp dir: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
@@ -38,17 +38,17 @@ func (r *CLIRenderer) Render(ctx context.Context, draftJSON []byte) ([]byte, err
 	htmlPath := filepath.Join(tmpDir, "index.html")
 
 	if err := os.WriteFile(jsonPath, draftJSON, 0o600); err != nil {
-		return nil, fmt.Errorf("write draft json: %w", err)
+		return nil, fmt.Errorf("failed to write draft json: %w", err)
 	}
 
 	cmd := exec.CommandContext(ctx, "python3", r.CLIPath, "--draft", jsonPath, "--output", htmlPath)
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return nil, fmt.Errorf("cli render failed: %w: %s", err, string(out))
+		return nil, fmt.Errorf("failed to run cli render: %w: %s", err, string(out))
 	}
 
 	html, err := os.ReadFile(htmlPath)
 	if err != nil {
-		return nil, fmt.Errorf("read rendered html: %w", err)
+		return nil, fmt.Errorf("failed to read rendered html: %w", err)
 	}
 	return html, nil
 }

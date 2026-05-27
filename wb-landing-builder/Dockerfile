@@ -10,7 +10,10 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -o wb-landing-builder .
 
-RUN git clone --depth=1 https://github.com/rki-mai/landing-builder-cli.git /opt/cli
+# Pin CLI commit explicitly; bump when landing-builder-cli interface changes.
+ARG LANDING_BUILDER_CLI_COMMIT=e05e2b1
+RUN git clone https://github.com/rki-mai/landing-builder-cli.git /opt/cli \
+    && git -C /opt/cli checkout "${LANDING_BUILDER_CLI_COMMIT}"
 
 # Runtime stage
 
