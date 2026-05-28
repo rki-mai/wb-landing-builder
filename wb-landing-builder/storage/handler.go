@@ -224,6 +224,18 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 
 	version, err := h.service.ApplyMutation(r.Context(), projectID, mutation)
 	if err != nil {
+		if errors.Is(err, ErrMutationNotFound) {
+			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		if errors.Is(err, ErrForbidden) {
+			httputil.WriteJSONError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		if errors.Is(err, ErrInvalidMutation) {
+			httputil.WriteJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to apply mutation: "+err.Error())
 		return
 	}
@@ -252,6 +264,14 @@ func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 
 	page, err := h.service.GetLatestDraft(r.Context(), projectID)
 	if err != nil {
+		if errors.Is(err, ErrDraftNotFound) {
+			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		if errors.Is(err, ErrForbidden) {
+			httputil.WriteJSONError(w, http.StatusForbidden, err.Error())
+			return
+		}
 		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to get page: "+err.Error())
 		return
 	}
@@ -287,6 +307,14 @@ func (h *DraftHandler) sendPage(w http.ResponseWriter, r *http.Request) {
 
 	page, err := h.service.GetDraft(r.Context(), projectID, version)
 	if err != nil {
+		if errors.Is(err, ErrDraftNotFound) {
+			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		if errors.Is(err, ErrForbidden) {
+			httputil.WriteJSONError(w, http.StatusForbidden, err.Error())
+			return
+		}
 		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to get page: "+err.Error())
 		return
 	}
