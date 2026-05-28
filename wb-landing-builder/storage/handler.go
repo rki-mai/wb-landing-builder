@@ -13,6 +13,7 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/rki-mai/wb-landing-builder/config"
+	"github.com/rki-mai/wb-landing-builder/httputil"
 )
 
 // MaxBodySize ограничивает размер тела запроса в 1 МБ
@@ -151,7 +152,7 @@ func (h *DraftHandler) handleLimit(w http.ResponseWriter, projectID string) bool
 		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(time.Now().Add(retryAfter).Unix(), 10))
 		w.Header().Set("Retry-After", strconv.FormatInt(int64(retryAfter.Seconds()), 10))
 
-		writeJSONError(w, http.StatusTooManyRequests,
+		httputil.WriteJSONError(w, http.StatusTooManyRequests,
 			fmt.Sprintf("rate limit exceeded. Limit: %d requests per %v. Retry after: %v",
 				h.rateLimiter.limit, h.rateLimiter.window, retryAfter))
 		return false
@@ -178,7 +179,7 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 
 	if projectID == "" {
-		writeJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
+		httputil.WriteJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
 		return
 	}
 
@@ -192,17 +193,17 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		var maxBytesErr *http.MaxBytesError
 		if errors.As(err, &maxBytesErr) {
-			writeJSONError(w, http.StatusRequestEntityTooLarge, "payload too large")
+			httputil.WriteJSONError(w, http.StatusRequestEntityTooLarge, "payload too large")
 			return
 		}
-		writeJSONError(w, http.StatusBadRequest, "failed to read body")
+		httputil.WriteJSONError(w, http.StatusBadRequest, "failed to read body")
 		return
 	}
 
 	documentLoader := gojsonschema.NewBytesLoader(body)
 	result, err := h.schema.Validate(documentLoader)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("failed to perform json validation: %s", err))
+		httputil.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("failed to perform json validation: %s", err))
 		return
 	}
 
@@ -211,23 +212,23 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 		for i, desc := range result.Errors() {
 			output += fmt.Sprintf("\t%d: %s\n", i+1, desc)
 		}
-		writeJSONError(w, http.StatusBadRequest, output)
+		httputil.WriteJSONError(w, http.StatusBadRequest, output)
 		return
 	}
 
 	var mutation Mutation
 	if err := json.Unmarshal(body, &mutation); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid mutation payload: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusBadRequest, "invalid mutation payload: "+err.Error())
 		return
 	}
 
 	version, err := h.service.ApplyMutation(r.Context(), projectID, mutation)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to apply mutation: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to apply mutation: "+err.Error())
 		return
 	}
 
-	writeJSONResponse(w, http.StatusOK, map[string]string{"status": "ok", "version": strconv.FormatInt(int64(version), 10)})
+	httputil.WriteJSONResponse(w, http.StatusOK, map[string]string{"status": "ok", "version": strconv.FormatInt(int64(version), 10)})
 }
 
 // GetLatestDraft получает последнюю версию черновика страницы.
@@ -245,17 +246,17 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 	if projectID == "" {
-		writeJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
+		httputil.WriteJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
 		return
 	}
 
 	page, err := h.service.GetLatestDraft(r.Context(), projectID)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to get page: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to get page: "+err.Error())
 		return
 	}
 
-	writeJSONResponse(w, http.StatusOK, page)
+	httputil.WriteJSONResponse(w, http.StatusOK, page)
 }
 
 // GetDraftByVersion получает конкретную версию черновика страницы.
@@ -276,36 +277,19 @@ func (h *DraftHandler) sendPage(w http.ResponseWriter, r *http.Request) {
 	version, err := strconv.Atoi(r.PathValue("version"))
 
 	if projectID == "" {
-		writeJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
+		httputil.WriteJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
 		return
 	}
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid URI: invalid version")
+		httputil.WriteJSONError(w, http.StatusBadRequest, "invalid URI: invalid version")
 		return
 	}
 
 	page, err := h.service.GetDraft(r.Context(), projectID, version)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to get page: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to get page: "+err.Error())
 		return
 	}
 
-	writeJSONResponse(w, http.StatusOK, page)
-}
-
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	writeJSONResponse(w, status, map[string]string{"error": message})
-}
-
-func writeJSONResponse(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	switch v := data.(type) {
-	case []byte:
-		w.Write(v)
-	default:
-		if err := json.NewEncoder(w).Encode(data); err != nil {
-			http.Error(w, "failed to encode response", http.StatusInternalServerError)
-		}
-	}
+	httputil.WriteJSONResponse(w, http.StatusOK, page)
 }

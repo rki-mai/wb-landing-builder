@@ -3,7 +3,7 @@ package publishing
 import (
 	"net/http"
 
-	"github.com/rki-mai/wb-landing-builder/publishing/utils"
+	"github.com/rki-mai/wb-landing-builder/httputil"
 )
 
 // Handler обрабатывает HTTP-запросы, связанные с публикациями.
@@ -39,11 +39,11 @@ func (h *Handler) listPublicationIDs(w http.ResponseWriter, r *http.Request) {
 
 	ids, err := h.service.ListIDsByProject(r.Context(), projectID)
 	if err != nil {
-		utils.WriteJSONError(w, http.StatusInternalServerError, "failed to list publications: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to list publications: "+err.Error())
 		return
 	}
 
-	utils.WriteJSONResponse(w, http.StatusOK, PublicationIDsResponse{IDs: ids})
+	httputil.WriteJSONResponse(w, http.StatusOK, PublicationIDsResponse{IDs: ids})
 }
 
 // CreatePublication создаёт публикацию по последнему черновику проекта.
@@ -62,11 +62,11 @@ func (h *Handler) createPublication(w http.ResponseWriter, r *http.Request) {
 
 	pub, err := h.service.Create(r.Context(), projectID)
 	if err != nil {
-		utils.WriteJSONError(w, http.StatusInternalServerError, "failed to create publication: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to create publication: "+err.Error())
 		return
 	}
 
-	utils.WriteJSONResponse(w, http.StatusCreated, pub)
+	httputil.WriteJSONResponse(w, http.StatusCreated, pub)
 }
 
 // GetPublication возвращает метаданные публикации по ID.
@@ -86,15 +86,15 @@ func (h *Handler) getPublication(w http.ResponseWriter, r *http.Request) {
 
 	pub, err := h.service.Get(r.Context(), id)
 	if err != nil {
-		utils.WriteJSONError(w, http.StatusInternalServerError, "failed to get publication: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to get publication: "+err.Error())
 		return
 	}
 	if pub == nil || pub.ProjectID != projectID {
-		utils.WriteJSONError(w, http.StatusNotFound, "publication not found")
+		httputil.WriteJSONError(w, http.StatusNotFound, "publication not found")
 		return
 	}
 
-	utils.WriteJSONResponse(w, http.StatusOK, pub)
+	httputil.WriteJSONResponse(w, http.StatusOK, pub)
 }
 
 // DeletePublication удаляет публикацию и её bundle из хранилища.
@@ -113,16 +113,16 @@ func (h *Handler) deletePublication(w http.ResponseWriter, r *http.Request) {
 
 	pub, err := h.service.Get(r.Context(), id)
 	if err != nil {
-		utils.WriteJSONError(w, http.StatusInternalServerError, "failed to delete publication: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to delete publication: "+err.Error())
 		return
 	}
 	if pub == nil || pub.ProjectID != projectID {
-		utils.WriteJSONError(w, http.StatusNotFound, "publication not found")
+		httputil.WriteJSONError(w, http.StatusNotFound, "publication not found")
 		return
 	}
 
 	if err := h.service.Delete(r.Context(), id); err != nil {
-		utils.WriteJSONError(w, http.StatusInternalServerError, "failed to delete publication: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to delete publication: "+err.Error())
 		return
 	}
 
