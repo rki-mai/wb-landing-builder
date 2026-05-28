@@ -1,0 +1,14 @@
+{
+  "operation": "create",
+  "data": {
+    "element": "text",
+    "id": "lb-2",
+    "parentId": "lb-1",
+    "index": 0,
+    "styles": {
+      "color": "#333333",
+      "fontSize": "24px"
+    },
+    "value": "Привет, Мир!"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "operation": "create",
+  "data": {
+    "element": "container",
+    "id": "lb-1",
+    "parentId": "root",
+    "index": 0,
+    "styles": {
+      "display": "flex",
+      "flexDirection": "column",
+      "padding": "20px"
+    }
+  }
+}

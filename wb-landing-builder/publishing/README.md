@@ -46,9 +46,53 @@ publishing/
 
 ## Быстрый старт
 
-### 1. Поднять окружение
+### Makefile (рекомендуется)
 
-Из каталога с `docker-compose.yml`:
+Команды выполнять из каталога с `main.go` и `docker-compose.yml` (`wb-landing-builder/wb-landing-builder/`):
+
+```bash
+make help          # список целей
+make up            # поднять MongoDB, MinIO и API
+make swag          # перегенерировать Swagger (локально, нужен Go)
+make swag-docker   # то же через Docker, без Go на хосте
+make rebuild       # swag + пересборка контейнера API
+make test-smoke    # сквозной HTTP-тест (curl): auth → storage → publishing
+make test          # go build + smoke
+```
+
+Переменные окружения для smoke-теста:
+
+| Переменная | По умолчанию | Назначение |
+|------------|--------------|------------|
+| `BASE_URL` | `http://localhost:8080` | URL API |
+| `PROJECT_ID` | `smoke-<timestamp>` | ID проекта в тесте |
+| `SMOKE_EMAIL` | `smoke-<timestamp>@example.com` | email тестового пользователя |
+| `SMOKE_VERBOSE` | `0` | `1` — печатать полный JSON ответов через jq |
+| `SMOKE_SKIP_CLEANUP` | `0` | `1` — не удалять тестовые данные из MongoDB |
+| `SMOKE_MONGO_CONTAINER` | `landing-mongo` | контейнер MongoDB для cleanup |
+
+После успешного прогона (и при падении теста) скрипт удаляет **только данные, созданные в этом запуске**:
+
+- мутации и snapshots черновика — `project_id` текущего прогона **и** `owner_id` зарегистрированных в тесте пользователей;
+- публикации — только по `_id`, полученным в этом прогоне (не все публикации проекта);
+- пользователей и refresh-токены — только по `_id`/`user_id` из ответов `register`.
+
+Чужие проекты, пользователи и публикации не затрагиваются.
+
+Пример:
+
+```bash
+make up
+make test-smoke
+# полный JSON на каждом шаге:
+SMOKE_VERBOSE=1 make test-smoke
+```
+
+Скрипт `scripts/smoke.sh` регистрирует пользователя, собирает черновик из `scripts/fixtures/mutations/`, создаёт публикацию, проверяет list/get, проверяет 403 для чужого пользователя, удаляет публикацию через API и **очищает MongoDB** (черновик + пользователи). На каждом шаге выводит краткую сводку; при ошибке — отформатированный JSON через jq.
+
+### 1. Поднять окружение вручную
+
+Из каталога с `main.go` и `docker-compose.yml`:
 
 ```bash
 docker compose up -d --build
@@ -62,27 +106,29 @@ docker compose ps
 
 ### 2. Обновить Swagger (если меняли аннотации в handler)
 
-Команды выполнять из каталога `wb-landing-builder/wb-landing-builder` (рядом с `main.go`).
+Команды выполнять из каталога `wb-landing-builder/wb-landing-builder` (рядом с `main.go`), либо через `make swag` / `make swag-docker` из каталога compose.
 
 **Локально** (нужны Go и сеть для `go install`):
 
 ```bash
+make swag
+make up
+```
+
+или вручную:
+
+```bash
 go mod download
 go install github.com/swaggo/swag/cmd/swag@v1.16.6
-swag init -g main.go -o docs --parseDependency --parseInternal
+$(go env GOPATH)/bin/swag init -g main.go -o docs --parseDependency --parseInternal
 docker compose up -d --build wb-landing-builder
 ```
 
-**Через Docker** (Go на хосте не нужен; `docs/` перезапишется в текущей директории):
+**Через Docker** (Go на хосте не нужен):
 
 ```bash
-docker run --rm \
-  -v "$(pwd):/app" \
-  -w /app \
-  golang:1.25.10-alpine \
-  sh -c 'apk add --no-cache git && go install github.com/swaggo/swag/cmd/swag@v1.16.6 && /root/go/bin/swag init -g main.go -o docs --parseDependency --parseInternal'
-
-docker compose up -d --build wb-landing-builder
+make swag-docker
+make up
 ```
 
 ### 3. Проверка через Swagger UI
@@ -232,9 +278,26 @@ docker compose up -d --build wb-landing-builder
 
 ## Тестирование
 
-В других компонентах интеграционные проверки делаются через HTTP-скрипты (например, `storage/test.py`), а не через `*_test.go` в Go. Для **publishing** достаточно ручной проверки по Swagger и просмотра объектов в MinIO; отдельный `service_test.go` в репозитории не используется.
+### Автоматический smoke-тест (рекомендуется)
 
-При необходимости позже можно добавить `publishing/test.py` по образцу storage.
+Из каталога с `main.go` и `docker-compose.yml`:
+
+```bash
+make up
+make test-smoke
+```
+
+Скрипт `scripts/smoke.sh` прогоняет полный сценарий без Swagger: регистрация → login → 6 mutations → GET draft → POST publication → list/get → проверка 403 для чужого пользователя → DELETE.
+
+Фикстуры мутаций: `scripts/fixtures/mutations/` (тот же набор, что в разделе «Черновик в Storage» ниже).
+
+### Нагрузочное тестирование storage
+
+В `storage/test.py` — нагрузочные проверки mutations API (aiohttp), не путать со smoke.
+
+### Ручная проверка
+
+Swagger UI + MinIO Console (http://localhost:9001) — см. раздел «Проверка через Swagger UI».
 
 ## Связанные материалы
 
