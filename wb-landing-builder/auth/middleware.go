@@ -2,8 +2,11 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
+
+	"github.com/rki-mai/wb-landing-builder/httputil"
 )
 
 type contextKey string
@@ -18,13 +21,13 @@ func AuthMiddleware(
 
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				http.Error(w, "missing Authorization header", http.StatusUnauthorized)
+				httputil.WriteJSONError(w, http.StatusUnauthorized, "missing Authorization header")
 				return
 			}
 
 			parts := strings.Fields(authHeader)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-				http.Error(w, "invalid Authorization header", http.StatusUnauthorized)
+				httputil.WriteJSONError(w, http.StatusUnauthorized, "invalid Authorization header")
 				return
 			}
 
@@ -32,7 +35,11 @@ func AuthMiddleware(
 
 			userID, err := authService.GetUserFromToken(token)
 			if err != nil {
-				http.Error(w, "invalid or expired token", http.StatusUnauthorized)
+				if errors.Is(err, ErrInvalidToken) || errors.Is(err, ErrInvalidClaims) || errors.Is(err, ErrUnexpectedSigningMethod) {
+					httputil.WriteJSONError(w, http.StatusUnauthorized, err.Error())
+					return
+				}
+				httputil.WriteJSONError(w, http.StatusInternalServerError, "internal server error")
 				return
 			}
 

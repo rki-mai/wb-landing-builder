@@ -32,8 +32,8 @@ func NewPublicationService(
 	}
 }
 
-func (s *PublicationService) Create(ctx context.Context, projectID string) (*Publication, error) {
-	draft, err := s.drafts.GetLatestDraft(ctx, projectID)
+func (s *PublicationService) Create(ctx context.Context, projectID, userID string) (*Publication, error) {
+	draft, err := s.drafts.GetLatestDraft(ctx, projectID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load draft: %w", err)
 	}

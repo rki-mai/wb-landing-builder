@@ -3,6 +3,7 @@ package publishing
 import (
 	"net/http"
 
+	"github.com/rki-mai/wb-landing-builder/auth"
 	"github.com/rki-mai/wb-landing-builder/httputil"
 )
 
@@ -60,7 +61,13 @@ func (h *Handler) listPublicationIDs(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) createPublication(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 
-	pub, err := h.service.Create(r.Context(), projectID)
+	userID, ok := r.Context().Value(auth.UserIDKey).(string)
+	if !ok {
+		httputil.WriteJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	pub, err := h.service.Create(r.Context(), projectID, userID)
 	if err != nil {
 		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to create publication: "+err.Error())
 		return

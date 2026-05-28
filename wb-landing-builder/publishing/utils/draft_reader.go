@@ -9,7 +9,7 @@ import (
 
 // DraftReader загружает актуальный снимок черновика из компонента storage.
 type DraftReader interface {
-	GetLatestDraft(ctx context.Context, projectID string) (*Draft, error)
+	GetLatestDraft(ctx context.Context, projectID, userID string) (*Draft, error)
 }
 
 type storageDraftReader struct {
@@ -21,8 +21,8 @@ func NewStorageDraftReader(drafts storage.DraftService) DraftReader {
 	return &storageDraftReader{drafts: drafts}
 }
 
-func (r *storageDraftReader) GetLatestDraft(ctx context.Context, projectID string) (*Draft, error) {
-	data, err := r.drafts.GetLatestDraft(ctx, projectID)
+func (r *storageDraftReader) GetLatestDraft(ctx context.Context, projectID, userID string) (*Draft, error) {
+	data, err := r.drafts.GetLatestDraft(ctx, projectID, userID)
 	if err != nil {
 		return nil, err
 	}

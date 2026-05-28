@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/rki-mai/wb-landing-builder/httputil"
@@ -86,7 +87,11 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 
 	tokens, err := h.service.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
-		httputil.WriteJSONError(w, http.StatusUnauthorized, "invalid credentials")
+		if errors.Is(err, ErrInvalidCredentials) {
+			httputil.WriteJSONError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to login: "+err.Error())
 		return
 	}
 
@@ -119,7 +124,11 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 
 	tokens, err := h.service.Refresh(r.Context(), req.RefreshToken)
 	if err != nil {
-		httputil.WriteJSONError(w, http.StatusUnauthorized, "invalid refresh token")
+		if errors.Is(err, ErrInvalidRefreshToken) || errors.Is(err, ErrRefreshTokenExpired) {
+			httputil.WriteJSONError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to refresh: "+err.Error())
 		return
 	}
 
@@ -144,8 +153,12 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user, err := h.service.GetUserByID(r.Context(), userID)
-	if err != nil || user == nil {
-		httputil.WriteJSONError(w, http.StatusUnauthorized, "user not found")
+	if err != nil {
+		if errors.Is(err, ErrUserNotFound) {
+			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to get user: "+err.Error())
 		return
 	}
 

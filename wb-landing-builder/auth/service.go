@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/rki-mai/wb-landing-builder/config"
@@ -37,7 +36,7 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (*Us
 		return nil, err
 	}
 	if existing != nil {
-		return nil, errors.New("user already exists")
+		return nil, ErrUserAlreadyExists
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -61,12 +60,15 @@ func (s *AuthService) Register(ctx context.Context, email, password string) (*Us
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (*TokenResponse, error) {
 	user, err := s.repo.GetUserByEmail(ctx, email)
-	if err != nil || user == nil {
-		return nil, errors.New("invalid credentials")
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrInvalidCredentials
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
-		return nil, errors.New("invalid credentials")
+		return nil, ErrInvalidCredentials
 	}
 
 	return s.generateTokens(ctx, user.ID)
@@ -74,12 +76,15 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Token
 
 func (s *AuthService) Refresh(ctx context.Context, refreshToken string) (*TokenResponse, error) {
 	stored, err := s.repo.GetRefreshToken(ctx, refreshToken)
-	if err != nil || stored == nil {
-		return nil, errors.New("invalid refresh token")
+	if err != nil {
+		return nil, err
+	}
+	if stored == nil {
+		return nil, ErrInvalidRefreshToken
 	}
 
 	if time.Now().After(stored.ExpiresAt) {
-		return nil, errors.New("refresh token expired")
+		return nil, ErrRefreshTokenExpired
 	}
 
 	if err := s.repo.DeleteRefreshToken(ctx, refreshToken); err != nil {
@@ -134,20 +139,23 @@ func (s *AuthService) GetUserFromToken(tokenStr string) (string, error) {
 		func(token *jwt.Token) (interface{}, error) {
 
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, errors.New("unexpected signing method")
+				return nil, ErrUnexpectedSigningMethod
 			}
 
 			return []byte(s.jwtSecret), nil
 		},
 	)
 
-	if err != nil || !token.Valid {
-		return "", errors.New("invalid token")
+	if err != nil {
+		return "", err
+	}
+	if !token.Valid {
+		return "", ErrInvalidToken
 	}
 
 	claims, ok := token.Claims.(*Claims)
 	if !ok {
-		return "", errors.New("invalid claims")
+		return "", ErrInvalidClaims
 	}
 
 	return claims.UserID, nil
@@ -159,7 +167,7 @@ func (s *AuthService) GetUserByID(ctx context.Context, id string) (*User, error)
 		return nil, err
 	}
 	if user == nil {
-		return nil, nil
+		return nil, ErrUserNotFound
 	}
 	return user, nil
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/xeipuuv/gojsonschema"
 
+	"github.com/rki-mai/wb-landing-builder/auth"
 	"github.com/rki-mai/wb-landing-builder/config"
 	"github.com/rki-mai/wb-landing-builder/httputil"
 )
@@ -183,6 +184,12 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, ok := r.Context().Value(auth.UserIDKey).(string)
+	if !ok {
+		httputil.WriteJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
 	if !h.handleLimit(w, projectID) {
 		return
 	}
@@ -222,7 +229,7 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	version, err := h.service.ApplyMutation(r.Context(), projectID, mutation)
+	version, err := h.service.ApplyMutation(r.Context(), projectID, userID, mutation)
 	if err != nil {
 		if errors.Is(err, ErrMutationNotFound) {
 			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
@@ -262,7 +269,13 @@ func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	page, err := h.service.GetLatestDraft(r.Context(), projectID)
+	userID, ok := r.Context().Value(auth.UserIDKey).(string)
+	if !ok {
+		httputil.WriteJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	page, err := h.service.GetLatestDraft(r.Context(), projectID, userID)
 	if err != nil {
 		if errors.Is(err, ErrDraftNotFound) {
 			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
@@ -304,8 +317,13 @@ func (h *DraftHandler) sendPage(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteJSONError(w, http.StatusBadRequest, "invalid URI: invalid version")
 		return
 	}
+	userID, ok := r.Context().Value(auth.UserIDKey).(string)
+	if !ok {
+		httputil.WriteJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
 
-	page, err := h.service.GetDraft(r.Context(), projectID, version)
+	page, err := h.service.GetDraft(r.Context(), projectID, userID, version)
 	if err != nil {
 		if errors.Is(err, ErrDraftNotFound) {
 			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())

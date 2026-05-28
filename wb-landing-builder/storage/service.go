@@ -62,26 +62,57 @@ func toMap(v interface{}) (map[string]interface{}, bool) {
 	}
 }
 
-func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, mutation Mutation) (int, error) {
+func (s *DraftService) checkOwnership(ctx context.Context, projectID string, userID string) error {
+	ownerID, err := s.repo.GetDraftOwner(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	if ownerID == "" {
+		return ErrDraftNotFound
+	}
+	if ownerID != userID {
+		return ErrForbidden
+	}
+	return nil
+}
+
+func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, userID string, mutation Mutation) (int, error) {
 	s.semaphore <- struct{}{}
 	defer func() { <-s.semaphore }()
+	ownerID, err := s.repo.GetDraftOwner(ctx, projectID)
+	if err != nil {
+		return 0, err
+	}
+	if ownerID != "" && ownerID != userID {
+		return 0, ErrForbidden
+	}
 	mutationToInsert := mutation.Data
 	mutationToInsert["deleted"] = mutation.Operation == OperationDelete
 	if mutation.Operation == OperationUpdate {
-		latestMutation, err := s.repo.GetLatestMutationForID(ctx, projectID, mutation.Data["id"].(string))
+		mutationID, ok := mutation.Data["id"].(string)
+		if !ok || mutationID == "" {
+			return 0, ErrInvalidMutation
+		}
+		latestMutation, err := s.repo.GetLatestMutationForID(ctx, projectID, mutationID)
 		if err != nil {
 			return 0, err
 		}
-		var ok bool
+		if latestMutation == nil {
+			return 0, ErrMutationNotFound
+		}
 		mutationToInsert, ok = deepcopy.Copy(latestMutation).(bson.M)
 		if !ok {
 			return 0, fmt.Errorf("mutation update failed: copy error")
 		}
 		delete(mutationToInsert, "_id")
-		fieldsBson := bson.M(mutation.Data["fields"].(map[string]interface{}))
+		fields, ok := mutation.Data["fields"].(map[string]interface{})
+		if !ok {
+			return 0, ErrInvalidMutation
+		}
+		fieldsBson := bson.M(fields)
 		s.mergeBSON(mutationToInsert, fieldsBson)
 	}
-	version, err := s.repo.InsertMutation(ctx, projectID, mutationToInsert)
+	version, err := s.repo.InsertMutation(ctx, projectID, userID, mutationToInsert)
 	if err != nil {
 		return 0, err
 	}
@@ -90,7 +121,9 @@ func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, muta
 		if err != nil {
 			return 0, err
 		}
-		s.repo.InsertDraft(ctx, projectID, mutations, version)
+		if err := s.repo.InsertDraft(ctx, projectID, userID, mutations, version); err != nil {
+			return 0, err
+		}
 	}
 	return version, nil
 }
@@ -141,24 +174,47 @@ func (s *DraftService) collapseMutations(ctx context.Context, projectID string, 
 	return uniqueMutations, nil
 }
 
-func (s *DraftService) GetDraft(ctx context.Context, projectID string, version int) ([]byte, error) {
+func (s *DraftService) GetDraft(ctx context.Context, projectID string, userID string, version int) ([]byte, error) {
 	s.semaphore <- struct{}{}
 	defer func() { <-s.semaphore }()
-	mutations, err := s.collapseMutations(ctx, projectID, version)
+	if err := s.checkOwnership(ctx, projectID, userID); err != nil {
+		return nil, err
+	}
+	elements, err := s.collapseMutations(ctx, projectID, version)
 	if err != nil {
 		return nil, err
 	}
-	jsonData, err := json.Marshal(mutations)
+	actualVersion := version
+	if version == math.MaxInt {
+		actualVersion = getMaxVersion(elements)
+	}
+	response := struct {
+		Version  int      `json:"version"`
+		Elements []bson.M `json:"elements"`
+	}{
+		Version:  actualVersion,
+		Elements: elements,
+	}
+	jsonData, err := json.Marshal(response)
 	if err != nil {
 		return nil, err
 	}
 	return jsonData, nil
 }
 
-func (s *DraftService) GetLatestDraft(ctx context.Context, projectID string) ([]byte, error) {
-	jsonData, err := s.GetDraft(ctx, projectID, math.MaxInt)
-	if err != nil {
-		return nil, err
+func (s *DraftService) GetLatestDraft(ctx context.Context, projectID string, userID string) ([]byte, error) {
+	return s.GetDraft(ctx, projectID, userID, math.MaxInt)
+}
+
+func getMaxVersion(elements []bson.M) int {
+	if len(elements) == 0 {
+		return 0
 	}
-	return jsonData, nil
+	maxV := elements[0]["version"].(int32)
+	for _, e := range elements[1:] {
+		if e["version"].(int32) > maxV {
+			maxV = e["version"].(int32)
+		}
+	}
+	return int(maxV)
 }
