@@ -328,7 +328,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Возвращает ID всех публикаций для указанного проекта (от новых к старым).",
+                "description": "Возвращает ID всех публикаций для указанного проекта (от новых к старым). Доступ только владельцу проекта.",
                 "produces": [
                     "application/json"
                 ],
@@ -352,6 +352,24 @@ const docTemplate = `{
                             "$ref": "#/definitions/publishing.PublicationIDsResponse"
                         }
                     },
+                    "401": {
+                        "description": "Требуется авторизация",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Нет доступа к проекту",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Проект не найден",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Внутренняя ошибка сервера",
                         "schema": {
@@ -366,7 +384,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Загружает последний черновик из storage, рендерит HTML и сохраняет bundle в объектное хранилище.",
+                "description": "Загружает последний черновик из storage, рендерит HTML и сохраняет bundle в объектное хранилище. Доступ только владельцу проекта.",
                 "produces": [
                     "application/json"
                 ],
@@ -396,6 +414,18 @@ const docTemplate = `{
                             "$ref": "#/definitions/publishing.ErrorResponse"
                         }
                     },
+                    "403": {
+                        "description": "Нет доступа к проекту",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Черновик не найден",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Внутренняя ошибка сервера",
                         "schema": {
@@ -412,6 +442,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "Возвращает метаданные публикации. Доступ только владельцу проекта.",
                 "produces": [
                     "application/json"
                 ],
@@ -442,8 +473,20 @@ const docTemplate = `{
                             "$ref": "#/definitions/publishing.Publication"
                         }
                     },
+                    "401": {
+                        "description": "Требуется авторизация",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Нет доступа к проекту",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
                     "404": {
-                        "description": "Публикация не найдена",
+                        "description": "Публикация или проект не найдены",
                         "schema": {
                             "$ref": "#/definitions/publishing.ErrorResponse"
                         }
@@ -462,6 +505,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "Удаляет публикацию и связанные файлы. Доступ только владельцу проекта.",
                 "tags": [
                     "Publications"
                 ],
@@ -486,8 +530,20 @@ const docTemplate = `{
                     "204": {
                         "description": "Публикация удалена"
                     },
+                    "401": {
+                        "description": "Требуется авторизация",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Нет доступа к проекту",
+                        "schema": {
+                            "$ref": "#/definitions/publishing.ErrorResponse"
+                        }
+                    },
                     "404": {
-                        "description": "Публикация не найдена",
+                        "description": "Публикация или проект не найдены",
                         "schema": {
                             "$ref": "#/definitions/publishing.ErrorResponse"
                         }

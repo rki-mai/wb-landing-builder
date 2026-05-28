@@ -32,10 +32,18 @@ func NewPublicationService(
 	}
 }
 
+func (s *PublicationService) ensureProjectAccess(ctx context.Context, projectID, userID string) error {
+	return s.drafts.CheckProjectAccess(ctx, projectID, userID)
+}
+
 func (s *PublicationService) Create(ctx context.Context, projectID, userID string) (*Publication, error) {
+	if err := s.ensureProjectAccess(ctx, projectID, userID); err != nil {
+		return nil, err
+	}
+
 	draft, err := s.drafts.GetLatestDraft(ctx, projectID, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load draft: %w", err)
+		return nil, err
 	}
 
 	draftJSON, err := draft.JSON()
@@ -76,25 +84,39 @@ func (s *PublicationService) Create(ctx context.Context, projectID, userID strin
 	return &pub, nil
 }
 
-func (s *PublicationService) ListIDsByProject(ctx context.Context, projectID string) ([]string, error) {
+func (s *PublicationService) ListIDsByProject(ctx context.Context, projectID, userID string) ([]string, error) {
+	if err := s.ensureProjectAccess(ctx, projectID, userID); err != nil {
+		return nil, err
+	}
 	return s.repo.ListIDsByProject(ctx, projectID)
 }
 
-func (s *PublicationService) Get(ctx context.Context, id string) (*Publication, error) {
+func (s *PublicationService) Get(ctx context.Context, projectID, userID, id string) (*Publication, error) {
+	if err := s.ensureProjectAccess(ctx, projectID, userID); err != nil {
+		return nil, err
+	}
+
 	pub, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
+	if pub == nil || pub.ProjectID != projectID {
+		return nil, ErrPublicationNotFound
+	}
 	return pub, nil
 }
 
-func (s *PublicationService) Delete(ctx context.Context, id string) error {
+func (s *PublicationService) Delete(ctx context.Context, projectID, userID, id string) error {
+	if err := s.ensureProjectAccess(ctx, projectID, userID); err != nil {
+		return err
+	}
+
 	pub, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return err
 	}
-	if pub == nil {
-		return nil
+	if pub == nil || pub.ProjectID != projectID {
+		return ErrPublicationNotFound
 	}
 
 	bundleKey := "publications/" + id

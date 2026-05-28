@@ -148,8 +148,9 @@ func (r *draftRepository) InsertDraft(ctx context.Context, projectID string, own
 func (r *draftRepository) GetDraftOwner(ctx context.Context, projectID string) (string, error) {
 	filter := bson.M{
 		"project_id": projectID,
+		"owner_id":   bson.M{"$exists": true, "$ne": ""},
 	}
-	opts := options.FindOne().SetSort(bson.D{{Key: "version", Value: 1}})
+	opts := options.FindOne().SetSort(bson.D{{Key: "version", Value: -1}})
 	var result struct {
 		OwnerID string `bson:"owner_id"`
 	}

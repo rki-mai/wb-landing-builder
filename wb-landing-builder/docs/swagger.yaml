@@ -336,7 +336,7 @@ paths:
   /api/v1/storage/{project_id}/publications:
     get:
       description: Возвращает ID всех публикаций для указанного проекта (от новых
-        к старым).
+        к старым). Доступ только владельцу проекта.
       parameters:
       - description: ID проекта
         in: path
@@ -350,6 +350,18 @@ paths:
           description: Список ID публикаций
           schema:
             $ref: '#/definitions/publishing.PublicationIDsResponse'
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "403":
+          description: Нет доступа к проекту
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "404":
+          description: Проект не найден
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
         "500":
           description: Внутренняя ошибка сервера
           schema:
@@ -361,7 +373,7 @@ paths:
       - Publications
     post:
       description: Загружает последний черновик из storage, рендерит HTML и сохраняет
-        bundle в объектное хранилище.
+        bundle в объектное хранилище. Доступ только владельцу проекта.
       parameters:
       - description: ID проекта
         in: path
@@ -379,6 +391,14 @@ paths:
           description: Требуется авторизация
           schema:
             $ref: '#/definitions/publishing.ErrorResponse'
+        "403":
+          description: Нет доступа к проекту
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "404":
+          description: Черновик не найден
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
         "500":
           description: Внутренняя ошибка сервера
           schema:
@@ -390,6 +410,7 @@ paths:
       - Publications
   /api/v1/storage/{project_id}/publications/{id}:
     delete:
+      description: Удаляет публикацию и связанные файлы. Доступ только владельцу проекта.
       parameters:
       - description: ID проекта
         in: path
@@ -404,8 +425,16 @@ paths:
       responses:
         "204":
           description: Публикация удалена
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "403":
+          description: Нет доступа к проекту
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
         "404":
-          description: Публикация не найдена
+          description: Публикация или проект не найдены
           schema:
             $ref: '#/definitions/publishing.ErrorResponse'
         "500":
@@ -418,6 +447,7 @@ paths:
       tags:
       - Publications
     get:
+      description: Возвращает метаданные публикации. Доступ только владельцу проекта.
       parameters:
       - description: ID проекта
         in: path
@@ -436,8 +466,16 @@ paths:
           description: Метаданные публикации
           schema:
             $ref: '#/definitions/publishing.Publication'
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "403":
+          description: Нет доступа к проекту
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
         "404":
-          description: Публикация не найдена
+          description: Публикация или проект не найдены
           schema:
             $ref: '#/definitions/publishing.ErrorResponse'
         "500":

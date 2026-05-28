@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -19,7 +20,22 @@ func (d *Draft) JSON() ([]byte, error) {
 }
 
 func parseDraftSnapshot(data []byte) (*Draft, error) {
-	// Storage отдаёт json.Marshal([]bson.M) — обычный JSON, не BSON binary/ext JSON.
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) > 0 && trimmed[0] == '{' {
+		var snapshot struct {
+			Elements []bson.M `json:"elements"`
+		}
+		if err := json.Unmarshal(data, &snapshot); err != nil {
+			return nil, fmt.Errorf("failed to parse draft snapshot: %w", err)
+		}
+		elements := snapshot.Elements
+		if elements == nil {
+			elements = []bson.M{}
+		}
+		return &Draft{elements: elements}, nil
+	}
+
+	// Обратная совместимость: голый массив элементов.
 	var elements []bson.M
 	if err := json.Unmarshal(data, &elements); err == nil {
 		if elements == nil {

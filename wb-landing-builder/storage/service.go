@@ -62,7 +62,8 @@ func toMap(v interface{}) (map[string]interface{}, bool) {
 	}
 }
 
-func (s *DraftService) checkOwnership(ctx context.Context, projectID string, userID string) error {
+// CheckOwnership проверяет, что userID совпадает с владельцем черновика проекта.
+func (s *DraftService) CheckOwnership(ctx context.Context, projectID, userID string) error {
 	ownerID, err := s.repo.GetDraftOwner(ctx, projectID)
 	if err != nil {
 		return err
@@ -177,7 +178,7 @@ func (s *DraftService) collapseMutations(ctx context.Context, projectID string, 
 func (s *DraftService) GetDraft(ctx context.Context, projectID string, userID string, version int) ([]byte, error) {
 	s.semaphore <- struct{}{}
 	defer func() { <-s.semaphore }()
-	if err := s.checkOwnership(ctx, projectID, userID); err != nil {
+	if err := s.CheckOwnership(ctx, projectID, userID); err != nil {
 		return nil, err
 	}
 	elements, err := s.collapseMutations(ctx, projectID, version)
