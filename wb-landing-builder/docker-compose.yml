@@ -1,9 +1,10 @@
 services:
   mongo:
-    image: mongo:7
+    build:
+      context: ./docker/mongo
+    image: landing-mongo:local
     container_name: landing-mongo
     restart: always
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "27017:27017"
     volumes:
@@ -11,53 +12,11 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok' | grep 1"]
+      test: ["CMD", "/usr/local/bin/mongo-healthcheck.sh"]
       interval: 5s
       timeout: 30s
       retries: 20
-      start_period: 20s
-
-  mongo-init:
-    image: mongo:7
-    depends_on:
-      mongo:
-        condition: service_healthy
-    networks:
-      - app-network
-    restart: "no"
-    entrypoint: >
-      bash -c '
-        echo "Waiting for MongoDB to be ready..."
-        until mongosh --host mongo:27017 --quiet --eval "db.adminCommand({ ping: 1 }).ok" | grep 1; do
-          sleep 1
-        done
-        echo "MongoDB is ready. Initializing replica set..."
-        mongosh --host mongo:27017 --quiet --eval "
-          try {
-            const status = rs.status();
-            print(\"Replica set already initialized: \" + status.set);
-          } catch (e) {
-            print(\"Initializing replica set...\");
-            rs.initiate({ _id: \"rs0\", members: [{ _id: 0, host: \"mongo:27017\" }] });
-            print(\"Replica set initialized successfully\");
-          }
-        "
-        echo "Creating admin user..."
-        mongosh --host mongo:27017 --quiet --eval "
-          db = db.getSiblingDB(\"admin\");
-          if (!db.getUser(\"admin\")) {
-            db.createUser({
-              user: \"admin\",
-              pwd: \"admin\",
-              roles: [{ role: \"root\", db: \"admin\" }]
-            });
-            print(\"Admin user created successfully\");
-          } else {
-            print(\"Admin user already exists\");
-          }
-        "
-        echo "MongoDB initialization complete!"
-      '
+      start_period: 30s
 
   mongo-express:
     image: mongo-express:latest
@@ -69,8 +28,8 @@ services:
       ME_CONFIG_MONGODB_URL: mongodb://admin:admin@mongo:27017/?replicaSet=rs0&authSource=admin
       ME_CONFIG_BASICAUTH: false
     depends_on:
-      mongo-init:
-        condition: service_completed_successfully
+      mongo:
+        condition: service_healthy
     networks:
       - app-network
     healthcheck:
@@ -81,39 +40,27 @@ services:
       start_period: 20s
 
   minio:
-    image: minio/minio:latest
+    build:
+      context: ./docker/minio
+    image: landing-minio:local
     container_name: landing-minio
-    command: server /data --console-address ":9001"
     ports:
       - "9000:9000"
       - "9001:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_DEFAULT_BUCKET: publications
     volumes:
       - miniodata:/data
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live >/dev/null || exit 1"]
+      test: ["CMD", "/usr/local/bin/minio-healthcheck.sh"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 15s
-
-  minio-init:
-    image: minio/mc:latest
-    depends_on:
-      minio:
-        condition: service_healthy
-    networks:
-      - app-network
-    restart: "no"
-    entrypoint: >
-      sh -c "
-        until mc alias set local http://minio:9000 minioadmin minioadmin 2>/dev/null; do sleep 2; done &&
-        mc mb -p local/publications || true
-      "
+      start_period: 20s
 
   wb-landing-builder:
     build: .
@@ -144,10 +91,6 @@ services:
       - S3_USE_PATH_STYLE=true
       - PUBLISHING_CLI_PATH=/app/cli/generate.py
     depends_on:
-      mongo-init:
-        condition: service_completed_successfully
-      minio-init:
-        condition: service_completed_successfully
       mongo:
         condition: service_healthy
       minio:
