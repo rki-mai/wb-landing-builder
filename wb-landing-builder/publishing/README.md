@@ -9,6 +9,8 @@
 - **Черновик** (storage) — для редактирования, JSON-мутации в MongoDB.
 - **Публикация** — неизменяемый снимок для просмотра: статические файлы в object storage.
 
+Создание публикации **асинхронное**: HTTP-ручка быстро создаёт запись со статусом `PENDING` и ставит задачу в RabbitMQ; worker в том же процессе выполняет рендер и загрузку в S3, обновляя статус до `FINISHED` или `FAILED`. Клиент опрашивает `GET …/publications/{id}` до завершения.
+
 Сейчас сборка упрощена (задача #18): в bundle кладутся `index.json` (исходный snapshot) и `index.html` (рендер через [landing-builder-cli](https://github.com/rki-mai/landing-builder-cli)). Полноценная сборка CSS/JS/медиа — в отдельной задаче; интерфейс `BlobStorage` уже рассчитан на несколько файлов в bundle.
 
 ## Структура пакета
@@ -16,9 +18,10 @@
 ```
 publishing/
 ├── handler.go      # HTTP API
-├── models.go       # Publication, запросы, ошибки
+├── models.go       # Publication, статусы, DTO
 ├── repository.go   # MongoDB: коллекция publications
-├── service.go      # сценарий Create / Get / Delete
+├── service.go      # Create (enqueue) / ProcessPublication (worker)
+├── worker/         # consumer RabbitMQ
 ├── README.md
 └── utils/
     ├── blobstorage.go    # интерфейс BlobStorage
@@ -26,7 +29,8 @@ publishing/
     ├── renderer.go       # рендер JSON → HTML (CLI)
     ├── draft.go          # снимок Draft (парсинг BSON/JSON)
     ├── draft_reader.go   # чтение черновика из storage
-    └── httputil.go       # JSON-ответы
+    ├── queue.go          # интерфейсы Publisher/Consumer
+    └── rabbitmq.go       # реализация RabbitMQ
 ```
 
 По аналогии с `auth/` и `storage/`: в корне — слой API и домена, в `utils/` — инфраструктурные детали и адаптеры.
@@ -38,8 +42,8 @@ publishing/
 | Метод | Путь | Описание |
 |-------|------|----------|
 | `GET` | `/api/v1/storage/{project_id}/publications` | Список ID публикаций проекта |
-| `POST` | `/api/v1/storage/{project_id}/publications` | Создать публикацию по последнему черновику проекта |
-| `GET` | `/api/v1/storage/{project_id}/publications/{id}` | Получить метаданные |
+| `POST` | `/api/v1/storage/{project_id}/publications` | Поставить публикацию в очередь (ответ `status: PENDING`) |
+| `GET` | `/api/v1/storage/{project_id}/publications/{id}` | Получить метаданные и статус (`PENDING` / `PROCESSING` / `FINISHED` / `FAILED`) |
 | `DELETE` | `/api/v1/storage/{project_id}/publications/{id}` | Удалить публикацию и bundle в S3 |
 
 Документация в Swagger: http://localhost:8080/swagger/index.html (тег **Publications**).
@@ -56,8 +60,9 @@ make up            # поднять MongoDB, MinIO и API
 make swag          # перегенерировать Swagger (локально, нужен Go)
 make swag-docker   # то же через Docker, без Go на хосте
 make rebuild       # swag + пересборка контейнера API
+make test-unit     # unit-тесты Go (без Docker)
 make test-smoke    # сквозной HTTP-тест (curl): auth → storage → publishing
-make test          # go build + smoke
+make test          # go build + unit + smoke
 ```
 
 Переменные окружения для smoke-теста:
@@ -266,7 +271,7 @@ make up
 
 Проверка черновика: `GET /api/v1/storage/demo-project` — в ответе массив из шести элементов (как в sample). Затем шаг 5 с публикацией.
 
-### Переменные окружения (S3 / CLI)
+### Переменные окружения (S3 / CLI / RabbitMQ)
 
 | Переменная | Назначение | По умолчанию в compose |
 |------------|------------|-------------------------|
@@ -275,8 +280,22 @@ make up
 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | Учётные данные | `minioadmin` |
 | `S3_USE_PATH_STYLE` | Path-style для MinIO | `true` |
 | `PUBLISHING_CLI_PATH` | Путь к `generate.py` | `/app/cli/generate.py` |
+| `RABBITMQ_URL` | URL брокера | `amqp://guest:guest@rabbitmq:5672/` |
+| `RABBITMQ_PUBLISH_QUEUE` | Очередь задач на рендер | `publish.requests` |
 
 ## Тестирование
+
+### Unit-тесты (publishing)
+
+Без Docker и внешних сервисов — проверяют async-логику `PublicationService` на моках (Mongo, S3, renderer, RabbitMQ):
+
+```bash
+make test-unit
+# только publishing:
+go test ./publishing/...
+```
+
+Покрывают: `Create` → `PENDING` без синхронного рендера, `ProcessPublication` → `FINISHED`, ошибку постановки в очередь, удаление.
 
 ### Автоматический smoke-тест (рекомендуется)
 

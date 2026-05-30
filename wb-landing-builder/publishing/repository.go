@@ -14,6 +14,7 @@ import (
 // PublicationRepository хранит метаданные публикаций в MongoDB.
 type PublicationRepository interface {
 	Insert(ctx context.Context, pub Publication) error
+	Update(ctx context.Context, pub Publication) error
 	Get(ctx context.Context, id string) (*Publication, error)
 	ListIDsByProject(ctx context.Context, projectID string) ([]string, error)
 	Delete(ctx context.Context, id string) error
@@ -80,6 +81,17 @@ func (r *publicationRepository) Insert(ctx context.Context, pub Publication) err
 	_, err := r.collection.InsertOne(ctx, pub)
 	if err != nil {
 		return fmt.Errorf("failed to insert publication: %w", err)
+	}
+	return nil
+}
+
+func (r *publicationRepository) Update(ctx context.Context, pub Publication) error {
+	result, err := r.collection.ReplaceOne(ctx, bson.M{"_id": pub.ID}, pub)
+	if err != nil {
+		return fmt.Errorf("failed to update publication: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		return ErrPublicationNotFound
 	}
 	return nil
 }

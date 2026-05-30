@@ -8,7 +8,7 @@ DOCKER_COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker
 
 .DEFAULT_GOAL := help
 
-.PHONY: help up down restart ps logs build rebuild swag swag-docker test test-go test-smoke
+.PHONY: help up down restart ps logs build rebuild swag swag-docker test test-go test-unit test-smoke
 
 help: ## Show available targets
 	@printf "Targets (run from %s):\n" "$(CURDIR)"
@@ -47,8 +47,11 @@ rebuild: swag up ## Regenerate Swagger and rebuild/restart API container
 test-go: build ## Compile all Go packages
 	@echo "Go build OK"
 
+test-unit: ## Run Go unit tests (no Docker required)
+	go test ./...
+
 test-smoke: ## Full HTTP smoke test: auth → storage → publishing (needs: curl, jq, make up)
 	@chmod +x $(SCRIPTS_DIR)/smoke.sh
 	BASE_URL=$(BASE_URL) $(SCRIPTS_DIR)/smoke.sh
 
-test: test-go test-smoke ## Run build + smoke test
+test: test-go test-unit test-smoke ## Run build + unit tests + smoke test

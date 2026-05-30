@@ -6,18 +6,25 @@ import "time"
 type PublicationStatus string
 
 const (
-	// StatusFinished — публикация завершена (синхронный сценарий).
+	// StatusPending — запись создана, задача поставлена в очередь.
+	StatusPending PublicationStatus = "PENDING"
+	// StatusProcessing — worker выполняет рендер и загрузку bundle.
+	StatusProcessing PublicationStatus = "PROCESSING"
+	// StatusFinished — bundle сохранён в объектном хранилище.
 	StatusFinished PublicationStatus = "FINISHED"
+	// StatusFailed — ошибка рендера или загрузки.
+	StatusFailed PublicationStatus = "FAILED"
 )
 
 // Publication описывает опубликованный снимок лендинга в объектном хранилище.
 type Publication struct {
-	ID         string            `json:"id" bson:"_id"`
-	ProjectID  string            `json:"project_id" bson:"project_id"`
-	Version    int               `json:"version" bson:"version"`
-	AssetsPath string            `json:"assets_path" bson:"assets_path"`
-	Status     PublicationStatus `json:"status" bson:"status"`
-	CreatedAt  time.Time         `json:"created_at" bson:"created_at"`
+	ID           string            `json:"id" bson:"_id"`
+	ProjectID    string            `json:"project_id" bson:"project_id"`
+	Version      int               `json:"version" bson:"version"`
+	AssetsPath   string            `json:"assets_path,omitempty" bson:"assets_path,omitempty"`
+	Status       PublicationStatus `json:"status" bson:"status"`
+	ErrorMessage string            `json:"error_message,omitempty" bson:"error_message,omitempty"`
+	CreatedAt    time.Time         `json:"created_at" bson:"created_at"`
 }
 
 // PublicationIDsResponse — список ID публикаций проекта.

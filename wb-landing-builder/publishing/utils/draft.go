@@ -14,6 +14,11 @@ type Draft struct {
 	elements []bson.M
 }
 
+// ParseDraftSnapshot разбирает JSON-снимок черновика.
+func ParseDraftSnapshot(data []byte) (*Draft, error) {
+	return parseDraftSnapshot(data)
+}
+
 // JSON возвращает снимок в JSON для CLI и index.json в bundle.
 func (d *Draft) JSON() ([]byte, error) {
 	return json.Marshal(d.elements)

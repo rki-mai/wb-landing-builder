@@ -55,14 +55,14 @@ func (h *Handler) listPublicationIDs(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSONResponse(w, http.StatusOK, PublicationIDsResponse{IDs: ids})
 }
 
-// CreatePublication создаёт публикацию по последнему черновику проекта.
+// CreatePublication ставит публикацию в очередь на рендер.
 // @Summary Создать публикацию
-// @Description Загружает последний черновик из storage, рендерит HTML и сохраняет bundle в объектное хранилище. Доступ только владельцу проекта.
+// @Description Создаёт запись публикации со статусом PENDING и ставит задачу на рендер в очередь. Доступ только владельцу проекта.
 // @Tags Publications
 // @Produce json
 // @Security BearerAuth
 // @Param project_id path string true "ID проекта"
-// @Success 201 {object} Publication "Публикация создана"
+// @Success 201 {object} Publication "Публикация поставлена в очередь (status=PENDING)"
 // @Failure 401 {object} ErrorResponse "Требуется авторизация"
 // @Failure 403 {object} ErrorResponse "Нет доступа к проекту"
 // @Failure 404 {object} ErrorResponse "Черновик не найден"
@@ -88,7 +88,7 @@ func (h *Handler) createPublication(w http.ResponseWriter, r *http.Request) {
 
 // GetPublication возвращает метаданные публикации по ID.
 // @Summary Получить публикацию
-// @Description Возвращает метаданные публикации. Доступ только владельцу проекта.
+// @Description Возвращает метаданные публикации и текущий статус (PENDING, PROCESSING, FINISHED, FAILED). Доступ только владельцу проекта.
 // @Tags Publications
 // @Produce json
 // @Security BearerAuth

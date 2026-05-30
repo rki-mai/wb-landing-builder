@@ -384,7 +384,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Загружает последний черновик из storage, рендерит HTML и сохраняет bundle в объектное хранилище. Доступ только владельцу проекта.",
+                "description": "Создаёт запись публикации со статусом PENDING и ставит задачу на рендер в очередь. Доступ только владельцу проекта.",
                 "produces": [
                     "application/json"
                 ],
@@ -403,7 +403,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "201": {
-                        "description": "Публикация создана",
+                        "description": "Публикация поставлена в очередь (status=PENDING)",
                         "schema": {
                             "$ref": "#/definitions/publishing.Publication"
                         }
@@ -442,7 +442,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Возвращает метаданные публикации. Доступ только владельцу проекта.",
+                "description": "Возвращает метаданные публикации и текущий статус (PENDING, PROCESSING, FINISHED, FAILED). Доступ только владельцу проекта.",
                 "produces": [
                     "application/json"
                 ],
@@ -718,6 +718,9 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "error_message": {
+                    "type": "string"
+                },
                 "id": {
                     "type": "string"
                 },
@@ -749,10 +752,16 @@ const docTemplate = `{
         "publishing.PublicationStatus": {
             "type": "string",
             "enum": [
-                "FINISHED"
+                "PENDING",
+                "PROCESSING",
+                "FINISHED",
+                "FAILED"
             ],
             "x-enum-varnames": [
-                "StatusFinished"
+                "StatusPending",
+                "StatusProcessing",
+                "StatusFinished",
+                "StatusFailed"
             ]
         },
         "storage.ErrorResponse": {

@@ -24,6 +24,7 @@ type Config struct {
 	DBConfig     DatabaseConfig
 	S3           S3Config
 	Publishing   PublishingConfig
+	RabbitMQ     RabbitMQConfig
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	RateLimit    int
@@ -40,6 +41,11 @@ type S3Config struct {
 
 type PublishingConfig struct {
 	CLIPath string
+}
+
+type RabbitMQConfig struct {
+	URL   string
+	Queue string
 }
 
 type DatabaseConfig struct {
@@ -100,6 +106,10 @@ func Load() *Config {
 		},
 		Publishing: PublishingConfig{
 			CLIPath: getEnv("PUBLISHING_CLI_PATH", "/app/cli/generate.py"),
+		},
+		RabbitMQ: RabbitMQConfig{
+			URL:   getEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/"),
+			Queue: getEnv("RABBITMQ_PUBLISH_QUEUE", "publish.requests"),
 		},
 	}
 }

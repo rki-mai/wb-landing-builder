@@ -62,9 +62,29 @@ services:
       retries: 5
       start_period: 20s
 
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: landing-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
   wb-landing-builder:
     build: .
     image: wb-landing-builder:latest
+    container_name: landing-builder
     restart: on-failure
     ports:
       - "8080:8080"
@@ -90,10 +110,14 @@ services:
       - S3_BUCKET=publications
       - S3_USE_PATH_STYLE=true
       - PUBLISHING_CLI_PATH=/app/cli/generate.py
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - RABBITMQ_PUBLISH_QUEUE=publish.requests
     depends_on:
       mongo:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     networks:
       - app-network

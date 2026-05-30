@@ -296,13 +296,37 @@ main() {
   maybe_verbose "$draft"
 
   log "Create publication"
-  local publication publication_id
+  local publication publication_id publication_status
   publication="$(json_post "/api/v1/storage/${PROJECT_ID}/publications" '{}' 201 "$token")"
   publication_id="$(echo "$publication" | jq -r '.id')"
+  publication_status="$(echo "$publication" | jq -r '.status')"
   [[ -n "$publication_id" && "$publication_id" != "null" ]] || fail "Empty publication id"
+  [[ "$publication_status" == "PENDING" ]] || fail "Expected status PENDING, got ${publication_status}"
   track_publication "$publication_id"
-  log_ok "$(echo "$publication" | jq -r '["id=\(.id)", "status=\(.status)", "assets=\(.assets_path)"] | join(", ")')"
+  log_ok "$(echo "$publication" | jq -r '["id=\(.id)", "status=\(.status)"] | join(", ")')"
   maybe_verbose "$publication"
+
+  log "Wait for publication to finish"
+  local pub_meta status assets_path attempt
+  pub_meta=""
+  status=""
+  for attempt in $(seq 1 30); do
+    pub_meta="$(json_get "/api/v1/storage/${PROJECT_ID}/publications/${publication_id}" 200 "$token")"
+    status="$(echo "$pub_meta" | jq -r '.status')"
+    if [[ "$status" == "FINISHED" ]]; then
+      assets_path="$(echo "$pub_meta" | jq -r '.assets_path')"
+      [[ -n "$assets_path" && "$assets_path" != "null" ]] || fail "Expected assets_path for FINISHED publication"
+      log_ok "$(echo "$pub_meta" | jq -r '["status=\(.status)", "assets=\(.assets_path)"] | join(", ")')"
+      maybe_verbose "$pub_meta"
+      break
+    fi
+    if [[ "$status" == "FAILED" ]]; then
+      dump_response "Publication failed" "$pub_meta"
+      fail "Publication ended with status FAILED"
+    fi
+    sleep 2
+  done
+  [[ "$status" == "FINISHED" ]] || fail "Publication did not reach FINISHED within timeout (last status=${status:-unknown})"
 
   log "List publication IDs"
   local ids
@@ -312,9 +336,8 @@ main() {
   log_ok "$(echo "$ids" | jq -r '.ids | "ids=[\(join(", "))]"')"
 
   log "Get publication metadata"
-  local pub_meta
   pub_meta="$(json_get "/api/v1/storage/${PROJECT_ID}/publications/${publication_id}" 200 "$token")"
-  log_ok "$(echo "$pub_meta" | jq -r '"project_id=\(.project_id), version=\(.version)"')"
+  log_ok "$(echo "$pub_meta" | jq -r '"project_id=\(.project_id), status=\(.status), version=\(.version)"')"
 
   log "Check project access control (foreign user gets 403)"
   local other_email other_token
