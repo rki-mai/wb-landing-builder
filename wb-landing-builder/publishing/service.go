@@ -127,7 +127,6 @@ func (s *PublicationService) renderAndUpload(
 
 	bundleKey := "publications/" + publicationID
 	blobs := []utils.Blob{
-		{Path: "index.json", Content: draftJSON, ContentType: "application/json"},
 		{Path: "index.html", Content: html, ContentType: "text/html; charset=utf-8"},
 	}
 

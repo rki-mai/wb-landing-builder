@@ -19,7 +19,7 @@ func ParseDraftSnapshot(data []byte) (*Draft, error) {
 	return parseDraftSnapshot(data)
 }
 
-// JSON возвращает снимок в JSON для CLI и index.json в bundle.
+// JSON возвращает снимок в JSON для CLI-рендера.
 func (d *Draft) JSON() ([]byte, error) {
 	return json.Marshal(d.elements)
 }

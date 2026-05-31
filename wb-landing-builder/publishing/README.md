@@ -11,7 +11,7 @@
 
 Создание публикации **асинхронное**: HTTP-ручка быстро создаёт запись со статусом `PENDING` и ставит задачу в RabbitMQ; worker в том же процессе выполняет рендер и загрузку в S3, обновляя статус до `FINISHED` или `FAILED`. Клиент опрашивает `GET …/publications/{id}` до завершения.
 
-Сейчас сборка упрощена (задача #18): в bundle кладутся `index.json` (исходный snapshot) и `index.html` (рендер через [landing-builder-cli](https://github.com/rki-mai/landing-builder-cli)). Полноценная сборка CSS/JS/медиа — в отдельной задаче; интерфейс `BlobStorage` уже рассчитан на несколько файлов в bundle.
+Сейчас сборка упрощена (задача #18): в bundle кладётся `index.html` (рендер через [landing-builder-cli](https://github.com/rki-mai/landing-builder-cli)). Полноценная сборка CSS/JS/медиа — в отдельной задаче; интерфейс `BlobStorage` уже рассчитан на несколько файлов в bundle.
 
 ## Структура пакета
 
@@ -143,7 +143,7 @@ make up
 3. **Authorize** → `Bearer <access_token>`
 4. **Storage** — собрать черновик для `demo-project` (см. ниже)
 5. **Publications** → `POST /api/v1/storage/demo-project/publications`
-6. В MinIO Console (http://localhost:9001, `minioadmin` / `minioadmin`) в bucket `publications` должны появиться `index.json` и `index.html`
+6. В MinIO Console (http://localhost:9001, `minioadmin` / `minioadmin`) в bucket `publications` должен появиться `index.html`
 
 #### Черновик в Storage (как `storage-sample.json`)
 
