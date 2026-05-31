@@ -52,7 +52,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.service.Register(r.Context(), req.Email, req.Password)
 	if err != nil {
-		if err.Error() == "user already exists" {
+		if errors.Is(err, ErrUserAlreadyExists) {
 			httputil.WriteJSONError(w, http.StatusConflict, err.Error())
 			return
 		}
