@@ -9,6 +9,8 @@ custom_instructions: |
   - Обращай внимание на: обработку ошибок, HTTP status codes, SQL/NoSQL injection, утечки goroutine,
     корректность контекста (context.Context), race conditions, валидацию входных данных
   - Не придирайся к форматированию — за это отвечает gofmt
+  - В конце итогового summary одной строкой укажи ориентировочную стоимость ревью в USD (если известна из ответа API)
+  - Лимиты OpenRouter в summary не выдумывай — их публикует отдельный комментарий workflow после ревью
 
 ignore_paths:
   - wb-landing-builder/docs/docs.go

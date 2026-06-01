@@ -45,7 +45,29 @@ jobs:
         with:
           ref: ${{ steps.pr.outputs.head_ref }}
 
-      - uses: mara-werils/ai-code-reviewer@v1
+      - name: OpenRouter quota (before)
+        id: quota_before
+        uses: actions/github-script@v7
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        with:
+          script: |
+            const res = await fetch('https://openrouter.ai/api/v1/key', {
+              headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}` },
+            });
+            if (!res.ok) {
+              core.setFailed(`OpenRouter /key: HTTP ${res.status}`);
+              return;
+            }
+            const { data } = await res.json();
+            core.setOutput('usage_daily', String(data?.usage_daily ?? 0));
+            core.setOutput('usage_monthly', String(data?.usage_monthly ?? 0));
+            core.setOutput('limit_remaining', data?.limit_remaining == null ? 'unlimited' : String(data.limit_remaining));
+            core.setOutput('is_free_tier', String(data?.is_free_tier ?? true));
+
+      - name: AI review
+        id: ai_review
+        uses: mara-werils/ai-code-reviewer@v1
         with:
           provider: openai
           model: meta-llama/llama-3.3-70b-instruct:free
@@ -55,6 +77,78 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           API_BASE_URL: https://openrouter.ai/api/v1
+
+      - name: Post OpenRouter usage report
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          COST_USD: ${{ steps.ai_review.outputs.cost_usd }}
+          COMMENTS_COUNT: ${{ steps.ai_review.outputs.comments_count }}
+          RISK_LEVEL: ${{ steps.ai_review.outputs.risk_level }}
+          USAGE_DAILY_BEFORE: ${{ steps.quota_before.outputs.usage_daily }}
+          USAGE_MONTHLY_BEFORE: ${{ steps.quota_before.outputs.usage_monthly }}
+          LIMIT_REMAINING_BEFORE: ${{ steps.quota_before.outputs.limit_remaining }}
+          IS_FREE_TIER: ${{ steps.quota_before.outputs.is_free_tier }}
+          AI_REVIEW_OUTCOME: ${{ steps.ai_review.outcome }}
+        with:
+          script: |
+            const fmt = (n) => (Number.isFinite(n) ? n.toFixed(6) : String(n));
+
+            let after = null;
+            try {
+              const res = await fetch('https://openrouter.ai/api/v1/key', {
+                headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}` },
+              });
+              if (res.ok) {
+                after = (await res.json()).data;
+              }
+            } catch (e) {
+              core.warning(`OpenRouter /key after review: ${e.message}`);
+            }
+
+            const beforeDaily = Number(process.env.USAGE_DAILY_BEFORE);
+            const afterDaily = after?.usage_daily ?? beforeDaily;
+            const deltaDaily = afterDaily - beforeDaily;
+
+            const limitRem = after?.limit_remaining ?? process.env.LIMIT_REMAINING_BEFORE;
+            const limitRemaining =
+              limitRem === 'unlimited' || limitRem == null
+                ? 'без лимита'
+                : fmt(Number(limitRem));
+
+            const freeNote = process.env.IS_FREE_TIER === 'true'
+              ? '> Бесплатные модели `:free`: ориентир **~50 запросов/сутки** без пополнения баланса ([лимиты OpenRouter](https://openrouter.ai/docs/api/reference/limits)).'
+              : '';
+
+            const reviewFailed = process.env.AI_REVIEW_OUTCOME !== 'success';
+            const body = [
+              '### 📊 Расход OpenRouter за этот `/review`',
+              '',
+              '| | |',
+              '|---|---|',
+              `| Оценка стоимости ревью (action) | **$${process.env.COST_USD || '0'}** |`,
+              `| Комментариев в PR | ${process.env.COMMENTS_COUNT || '—'} |`,
+              `| Уровень риска (action) | ${process.env.RISK_LEVEL || '—'} |`,
+              `| Кредиты за сегодня (до → после) | ${fmt(beforeDaily)} → ${fmt(afterDaily)} (**Δ ${fmt(deltaDaily)}**) |`,
+              `| Кредиты за месяц | ${fmt(after?.usage_monthly ?? Number(process.env.USAGE_MONTHLY_BEFORE))} |`,
+              `| Остаток кредитов на ключе | ${limitRemaining} |`,
+              `| Модель | \`meta-llama/llama-3.3-70b-instruct:free\` |`,
+              '',
+              freeNote,
+              reviewFailed ? '\n⚠️ Шаг AI review завершился с ошибкой — цифры кредитов могут не отражать полный прогон.' : '',
+              '',
+              '<sub>Данные: <code>GET /api/v1/key</code> · <a href="https://openrouter.ai/activity">активность в OpenRouter</a></sub>',
+            ]
+              .filter(Boolean)
+              .join('\n');
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body,
+            });
 
       - name: React success
         if: success()
