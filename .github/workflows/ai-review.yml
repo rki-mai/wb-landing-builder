@@ -29,7 +29,7 @@ jobs:
               content: 'eyes',
             });
 
-      - name: Get PR head ref
+      - name: Get PR head commit
         id: pr
         uses: actions/github-script@v7
         with:
@@ -39,11 +39,13 @@ jobs:
               repo: context.repo.repo,
               pull_number: context.issue.number,
             });
+            // SHA, а не имя ветки: после merge ветку часто удаляют — checkout по ref тогда падает
+            core.setOutput('head_sha', pr.data.head.sha);
             core.setOutput('head_ref', pr.data.head.ref);
 
       - uses: actions/checkout@v4
         with:
-          ref: ${{ steps.pr.outputs.head_ref }}
+          ref: ${{ steps.pr.outputs.head_sha }}
 
       - name: OpenRouter quota (before)
         id: quota_before
