@@ -64,36 +64,20 @@ jobs:
             const { data } = await res.json();
             core.setOutput('usage_daily', String(data?.usage_daily ?? 0));
             core.setOutput('usage_monthly', String(data?.usage_monthly ?? 0));
-            core.setOutput('limit_remaining', data?.limit_remaining == null ? 'unlimited' : String(data.limit_remaining));
+            core.setOutput('limit_remaining', data?.limit_remaining == null ? 'n/a' : String(data.limit_remaining));
             core.setOutput('is_free_tier', String(data?.is_free_tier ?? true));
-
-      - name: Verify OpenRouter API
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        run: |
-          set -euo pipefail
-          echo "Checking API key..."
-          curl -fsS "https://openrouter.ai/api/v1/key" \
-            -H "Authorization: Bearer ${OPENROUTER_API_KEY}" | head -c 500
-          echo ""
-          echo "Checking chat completions..."
-          curl -fsS "https://openrouter.ai/api/v1/chat/completions" \
-            -H "Authorization: Bearer ${OPENROUTER_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -H "HTTP-Referer: https://github.com/rki-mai/wb-landing-builder" \
-            -H "X-OpenRouter-Title: wb-landing-builder-ai-review" \
-            -d '{"model":"meta-llama/llama-3.3-70b-instruct:free","messages":[{"role":"user","content":"ping"}],"max_tokens":8}'
 
       - name: AI review
         id: ai_review
         uses: mara-werils/ai-code-reviewer@v1
         with:
           provider: openai
-          model: meta-llama/llama-3.3-70b-instruct:free
+          model: openrouter/free
           api_base_url: https://openrouter.ai/api/v1
           language: ru
           review_style: thorough
           max_comments: '20'
+          suggest_tests: 'false'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
@@ -113,17 +97,46 @@ jobs:
         with:
           script: |
             const fmt = (n) => (Number.isFinite(n) ? n.toFixed(6) : String(n));
+            const headers = {
+              Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+              'Content-Type': 'application/json',
+              'HTTP-Referer': 'https://github.com/rki-mai/wb-landing-builder',
+              'X-OpenRouter-Title': 'wb-landing-builder-ai-review',
+            };
 
             let after = null;
             try {
-              const res = await fetch('https://openrouter.ai/api/v1/key', {
-                headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}` },
-              });
-              if (res.ok) {
-                after = (await res.json()).data;
-              }
+              const res = await fetch('https://openrouter.ai/api/v1/key', { headers });
+              if (res.ok) after = (await res.json()).data;
             } catch (e) {
               core.warning(`OpenRouter /key after review: ${e.message}`);
+            }
+
+            let probeText = '';
+            try {
+              const probe = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({
+                  model: 'openrouter/free',
+                  messages: [{ role: 'user', content: 'ping' }],
+                  max_tokens: 5,
+                }),
+              });
+              const rl = {
+                limit: probe.headers.get('x-ratelimit-limit'),
+                remaining: probe.headers.get('x-ratelimit-remaining'),
+                reset: probe.headers.get('x-ratelimit-reset'),
+                retryAfter: probe.headers.get('retry-after'),
+              };
+              if (probe.ok) {
+                probeText = `**Пробный API-запрос:** OK (rate limit ${rl.remaining ?? '?'}/${rl.limit ?? '?'})`;
+              } else {
+                const errBody = await probe.text();
+                probeText = `**Пробный API-запрос:** HTTP ${probe.status}\n\`\`\`\n${errBody.slice(0, 900)}\n\`\`\`\nRate headers: \`${JSON.stringify(rl)}\``;
+              }
+            } catch (e) {
+              probeText = `**Пробный API-запрос:** ${e.message}`;
             }
 
             const beforeDaily = Number(process.env.USAGE_DAILY_BEFORE);
@@ -131,38 +144,36 @@ jobs:
             const deltaDaily = afterDaily - beforeDaily;
 
             const limitRem = after?.limit_remaining ?? process.env.LIMIT_REMAINING_BEFORE;
-            const limitRemaining =
-              limitRem === 'unlimited' || limitRem == null
-                ? 'без лимита'
+            const prepaidBalance =
+              limitRem === 'n/a' || limitRem == null
+                ? 'нет prepaid-баланса (free tier, $0 за токены — это норма)'
                 : fmt(Number(limitRem));
 
             const freeNote = process.env.IS_FREE_TIER === 'true'
-              ? '> Бесплатные модели `:free`: ориентир **~50 запросов/сутки** без пополнения баланса ([лимиты OpenRouter](https://openrouter.ai/docs/api/reference/limits)).'
+              ? '> **$0 в usage ≠ безлимит.** Free tier ограничен **числом запросов** (~50/день, ~20/мин). Неудачные вызовы тоже считаются. См. [limits](https://openrouter.ai/docs/api/reference/limits) и [FAQ](https://openrouter.zendesk.com/hc/en-us/articles/39501163636379-OpenRouter-Rate-Limits-What-You-Need-to-Know).'
               : '';
 
             const reviewFailed = process.env.AI_REVIEW_OUTCOME !== 'success';
             const failHint = reviewFailed
-              ? '\n💡 Если снова падает **AI review**: открой лог job → шаг *AI review*. Частая причина — не задан `api_base_url` (запросы уходят на OpenAI вместо OpenRouter).'
+              ? '\n⚠️ **AI review** упал — смотри пробный запрос выше и лог шага *AI review*. 429 при $0 usage = лимит **запросов** или очередь у free-провайдера, не «кончились деньги».'
               : '';
             const body = [
               '### 📊 Расход OpenRouter за этот `/review`',
               '',
               '| | |',
               '|---|---|',
-              `| Оценка стоимости ревью (action) | **$${process.env.COST_USD || '0'}** |`,
+              `| Стоимость ревью (action) | **$${process.env.COST_USD || '0'}** |`,
               `| Комментариев в PR | ${process.env.COMMENTS_COUNT || '—'} |`,
-              `| Уровень риска (action) | ${process.env.RISK_LEVEL || '—'} |`,
-              `| Кредиты за сегодня (до → после) | ${fmt(beforeDaily)} → ${fmt(afterDaily)} (**Δ ${fmt(deltaDaily)}**) |`,
-              `| Кредиты за месяц | ${fmt(after?.usage_monthly ?? Number(process.env.USAGE_MONTHLY_BEFORE))} |`,
-              `| Остаток кредитов на ключе | ${limitRemaining} |`,
-              `| Модель | \`meta-llama/llama-3.3-70b-instruct:free\` |`,
+              `| Кредиты ($) сегодня (до → после) | ${fmt(beforeDaily)} → ${fmt(afterDaily)} (**Δ ${fmt(deltaDaily)}**) |`,
+              `| Prepaid-баланс | ${prepaidBalance} |`,
+              `| Модель | \`openrouter/free\` |`,
+              '',
+              probeText,
               '',
               freeNote,
-              reviewFailed
-                ? '\n⚠️ Шаг AI review завершился с ошибкой — цифры кредитов могут не отражать полный прогон.' + failHint
-                : '',
+              failHint,
               '',
-              '<sub>Данные: <code>GET /api/v1/key</code> · <a href="https://openrouter.ai/activity">активность в OpenRouter</a></sub>',
+              '<sub>Кредиты ($) и число API-запросов — разные счётчики. Запросы: <a href="https://openrouter.ai/activity">Activity</a>.</sub>',
             ]
               .filter(Boolean)
               .join('\n');
