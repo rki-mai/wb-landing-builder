@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/rki-mai/wb-landing-builder/auth"
@@ -132,6 +133,10 @@ func (h *DraftHandler) RegisterRoutes(
 	middleware func(http.Handler) http.Handler,
 ) {
 	mux.Handle(
+		"POST /api/v1/storage/projects",
+		middleware(http.HandlerFunc(h.createProject)),
+	)
+	mux.Handle(
 		"POST /api/v1/storage/{project_id}/mutations",
 		middleware(http.HandlerFunc(h.applyMutation)),
 	)
@@ -159,6 +164,24 @@ func (h *DraftHandler) handleLimit(w http.ResponseWriter, projectID string) bool
 		return false
 	}
 	return true
+}
+
+func (h *DraftHandler) createProject(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(auth.UserIDKey).(string)
+
+	if !ok {
+		httputil.WriteJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	projectID := uuid.NewString()
+	err := h.service.CreateProject(r.Context(), projectID, userID)
+	if err != nil {
+		httputil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	httputil.WriteJSONResponse(w, http.StatusCreated, map[string]string{"project_id": projectID})
 }
 
 // ApplyMutation применяет мутацию к черновику страницы проекта.
@@ -277,7 +300,7 @@ func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 
 	page, err := h.service.GetLatestDraft(r.Context(), projectID, userID)
 	if err != nil {
-		if errors.Is(err, ErrDraftNotFound) {
+		if errors.Is(err, ErrProjectNotFound) {
 			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
 			return
 		}
@@ -325,7 +348,7 @@ func (h *DraftHandler) sendPage(w http.ResponseWriter, r *http.Request) {
 
 	page, err := h.service.GetDraft(r.Context(), projectID, userID, version)
 	if err != nil {
-		if errors.Is(err, ErrDraftNotFound) {
+		if errors.Is(err, ErrProjectNotFound) {
 			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
 			return
 		}

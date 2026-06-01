@@ -39,6 +39,16 @@ type Mutation struct {
 	Data bson.M `json:"data" swaggertype:"object" example:"{\"id\":\"header-1\",\"content\":\"Hello World\"}"`
 }
 
+// Project представляет пользовательский проект.
+// @Description Проект пользователя.
+type Project struct {
+	// ID уникальный идентификатор проекта.
+	ID string `json:"id" example:"project-123"`
+
+	// Name отображаемое имя проекта.
+	Name string `json:"name" example:"Landing Page"`
+}
+
 // ErrorResponse стандартный формат ответа об ошибке.
 type ErrorResponse struct {
 	// Error описание произошедшей ошибки.
