@@ -1,7 +1,7 @@
 # AI-ревью PR по запросу: напишите /review в комментарии к PR.
 # Провайдер: OpenRouter — https://openrouter.ai/keys
 # Org secret: OPENROUTER_API_KEY
-# Промпт и стиль: .pr-reviewer.yml
+# ignore_paths и лимиты: .pr-reviewer.yml
 name: AI Code Review
 
 on:
@@ -40,7 +40,6 @@ jobs:
               repo: context.repo.repo,
               pull_number: context.issue.number,
             });
-            // SHA, а не имя ветки: после merge ветку часто удаляют — checkout по ref тогда падает
             core.setOutput('head_sha', pr.data.head.sha);
             core.setOutput('head_ref', pr.data.head.ref);
 
@@ -53,16 +52,34 @@ jobs:
         uses: mara-werils/ai-code-reviewer@v1
         with:
           provider: openai
-          model: openrouter/free
+          # Конкретная модель стабильнее openrouter/free; json_mode ломается при обрезке ответа
+          model: meta-llama/llama-3.3-70b-instruct:free
           api_base_url: https://openrouter.ai/api/v1
+          language: ru
+          review_style: thorough
+          max_comments: '12'
           suggest_tests: 'false'
           auto_summarize: 'true'
           custom_instructions: |
-            Ссылки на код для этого PR (обязательно использовать в комментариях и summary):
-            - Репозиторий: ${{ github.repository }}
+            Проект: backend конструктора лендингов на Go (Gin, MongoDB, RabbitMQ, S3/MinIO), код в wb-landing-builder/.
+
+            Язык: русский во всех полях JSON (summary, body комментариев).
+
+            Ссылки на код (обязательно):
             - Head SHA: ${{ steps.pr.outputs.head_sha }}
             - Шаблон: https://github.com/${{ github.repository }}/blob/${{ steps.pr.outputs.head_sha }}/<path>#L<line>
-            - Пример: https://github.com/${{ github.repository }}/blob/${{ steps.pr.outputs.head_sha }}/wb-landing-builder/cmd/main.go#L10-L20
+            - В каждом comment.body — markdown-ссылка вида [файл:строки](URL)
+            - В summary — список bullet с ссылками на ключевые места
+
+            Глубина: для warning/critical — что не так → риск → как исправить (имена функций/типов).
+            Не комментируй gofmt/goimports. Не пиши про стоимость API.
+
+            Критично для парсинга (action ждёт строгий JSON, лимит ~4096 токенов на ответ):
+            - Ответ — только один валидный JSON-объект, без текста до/после
+            - Экранируй кавычки и переносы в строках JSON (\n, \")
+            - body каждого комментария — до 4 предложений + одна ссылка; без длинных простыней
+            - suggestion-блоки — только короткий фрагмент кода (до ~8 строк)
+            - Не более 12 comments; приоритет: security, bugs, контракты API
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
