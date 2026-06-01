@@ -22,9 +22,30 @@ type Config struct {
 	RefreshTokenExpiration time.Duration
 
 	DBConfig     DatabaseConfig
+	S3           S3Config
+	Publishing   PublishingConfig
+	RabbitMQ     RabbitMQConfig
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	RateLimit    int
+}
+
+type S3Config struct {
+	Endpoint     string
+	Region       string
+	AccessKey    string
+	SecretKey    string
+	Bucket       string
+	UsePathStyle bool
+}
+
+type PublishingConfig struct {
+	CLIPath string
+}
+
+type RabbitMQConfig struct {
+	URL   string
+	Queue string
 }
 
 type DatabaseConfig struct {
@@ -53,6 +74,8 @@ func Load() *Config {
 	jwtExpiration, _ := time.ParseDuration(getEnv("JWT_EXPIRATION", "15m"))
 	refreshTokenExpiration, _ := time.ParseDuration(getEnv("REFRESH_TOKEN_EXPIRATION", "168h"))
 
+	s3UsePathStyle, _ := strconv.ParseBool(getEnv("S3_USE_PATH_STYLE", "true"))
+
 	return &Config{
 		Port:                   getEnv("PORT", "8080"),
 		Environment:            getEnv("ENVIRONMENT", "production"),
@@ -72,6 +95,21 @@ func Load() *Config {
 			Database:       getEnv("MONGO_DATABASE", "storage"),
 			MaxConnections: maxConnections,
 			TtlDays:        ttlDays,
+		},
+		S3: S3Config{
+			Endpoint:     getEnv("S3_ENDPOINT", "http://minio:9000"),
+			Region:       getEnv("S3_REGION", "us-east-1"),
+			AccessKey:    getEnv("S3_ACCESS_KEY", "minioadmin"),
+			SecretKey:    getEnv("S3_SECRET_KEY", "minioadmin"),
+			Bucket:       getEnv("S3_BUCKET", "publications"),
+			UsePathStyle: s3UsePathStyle,
+		},
+		Publishing: PublishingConfig{
+			CLIPath: getEnv("PUBLISHING_CLI_PATH", "/app/cli/generate.py"),
+		},
+		RabbitMQ: RabbitMQConfig{
+			URL:   getEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/"),
+			Queue: getEnv("RABBITMQ_PUBLISH_QUEUE", "publish.requests"),
 		},
 	}
 }

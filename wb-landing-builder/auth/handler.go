@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+
+	"github.com/rki-mai/wb-landing-builder/httputil"
 )
 
 type Handler struct {
@@ -39,26 +41,26 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	var req RegisterRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		httputil.WriteJSONError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Email == "" || req.Password == "" {
-		writeJSONError(w, http.StatusBadRequest, "email and password required")
+		httputil.WriteJSONError(w, http.StatusBadRequest, "email and password required")
 		return
 	}
 
 	user, err := h.service.Register(r.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, ErrUserAlreadyExists) {
-			writeJSONError(w, http.StatusConflict, err.Error())
+			httputil.WriteJSONError(w, http.StatusConflict, err.Error())
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to register: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to register")
 		return
 	}
 
-	writeJSONResponse(w, http.StatusCreated, map[string]string{
+	httputil.WriteJSONResponse(w, http.StatusCreated, map[string]string{
 		"id":    user.ID,
 		"email": user.Email,
 	})
@@ -79,21 +81,21 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var req LoginRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		httputil.WriteJSONError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	tokens, err := h.service.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		if errors.Is(err, ErrInvalidCredentials) {
-			writeJSONError(w, http.StatusUnauthorized, err.Error())
+			httputil.WriteJSONError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to login: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to login: "+err.Error())
 		return
 	}
 
-	writeJSONResponse(w, http.StatusOK, tokens)
+	httputil.WriteJSONResponse(w, http.StatusOK, tokens)
 }
 
 // Refresh обновляет токены доступа.
@@ -111,26 +113,26 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 	var req RefreshRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid request body")
+		httputil.WriteJSONError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if req.RefreshToken == "" {
-		writeJSONError(w, http.StatusBadRequest, "refresh_token required")
+		httputil.WriteJSONError(w, http.StatusBadRequest, "refresh_token required")
 		return
 	}
 
 	tokens, err := h.service.Refresh(r.Context(), req.RefreshToken)
 	if err != nil {
 		if errors.Is(err, ErrInvalidRefreshToken) || errors.Is(err, ErrRefreshTokenExpired) {
-			writeJSONError(w, http.StatusUnauthorized, err.Error())
+			httputil.WriteJSONError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to refresh: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to refresh: "+err.Error())
 		return
 	}
 
-	writeJSONResponse(w, http.StatusOK, tokens)
+	httputil.WriteJSONResponse(w, http.StatusOK, tokens)
 }
 
 // Me получает информацию о текущем пользователе.
@@ -146,35 +148,22 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(UserIDKey).(string)
 	if !ok {
-		writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+		httputil.WriteJSONError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	user, err := h.service.GetUserByID(r.Context(), userID)
 	if err != nil {
 		if errors.Is(err, ErrUserNotFound) {
-			writeJSONError(w, http.StatusNotFound, err.Error())
+			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		writeJSONError(w, http.StatusInternalServerError, "failed to get user: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to get user: "+err.Error())
 		return
 	}
 
-	writeJSONResponse(w, http.StatusOK, map[string]string{
+	httputil.WriteJSONResponse(w, http.StatusOK, map[string]string{
 		"id":    user.ID,
 		"email": user.Email,
 	})
-}
-
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	writeJSONResponse(w, status, map[string]string{"error": message})
-}
-
-func writeJSONResponse(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-
-	if err := json.NewEncoder(w).Encode(data); err != nil {
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
-	}
 }

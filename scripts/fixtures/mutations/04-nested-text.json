@@ -1,0 +1,14 @@
+{
+  "operation": "create",
+  "data": {
+    "element": "text",
+    "id": "lb-4",
+    "parentId": "lb-3",
+    "index": 0,
+    "styles": {
+      "color": "#666666",
+      "fontSize": "16px"
+    },
+    "value": "Это пример вложенной структуры."
+  }
+}

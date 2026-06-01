@@ -1,0 +1,15 @@
+{
+  "operation": "create",
+  "data": {
+    "element": "link",
+    "id": "lb-6",
+    "parentId": "lb-1",
+    "index": 2,
+    "styles": {
+      "color": "blue",
+      "textDecoration": "underline"
+    },
+    "value": "Подробнее",
+    "src": "https://example.com"
+  }
+}

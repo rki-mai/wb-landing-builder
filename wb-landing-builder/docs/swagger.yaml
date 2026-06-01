@@ -72,6 +72,50 @@ definitions:
         example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
         type: string
     type: object
+  publishing.ErrorResponse:
+    properties:
+      error:
+        example: описание ошибки...
+        type: string
+    type: object
+  publishing.Publication:
+    properties:
+      assets_path:
+        type: string
+      created_at:
+        type: string
+      error_message:
+        type: string
+      id:
+        type: string
+      project_id:
+        type: string
+      status:
+        $ref: '#/definitions/publishing.PublicationStatus'
+      version:
+        type: integer
+    type: object
+  publishing.PublicationIDsResponse:
+    properties:
+      ids:
+        example:
+        - 550e8400-e29b-41d4-a716-446655440000
+        items:
+          type: string
+        type: array
+    type: object
+  publishing.PublicationStatus:
+    enum:
+    - PENDING
+    - PROCESSING
+    - FINISHED
+    - FAILED
+    type: string
+    x-enum-varnames:
+    - StatusPending
+    - StatusProcessing
+    - StatusFinished
+    - StatusFailed
   storage.ErrorResponse:
     properties:
       error:
@@ -297,6 +341,161 @@ paths:
       summary: Применить мутацию
       tags:
       - Storage
+  /api/v1/storage/{project_id}/publications:
+    get:
+      description: Возвращает ID всех публикаций для указанного проекта (от новых
+        к старым). Доступ только владельцу проекта.
+      parameters:
+      - description: ID проекта
+        in: path
+        name: project_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список ID публикаций
+          schema:
+            $ref: '#/definitions/publishing.PublicationIDsResponse'
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "403":
+          description: Нет доступа к проекту
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "404":
+          description: Проект не найден
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Список ID публикаций проекта
+      tags:
+      - Publications
+    post:
+      description: Создаёт запись публикации со статусом PENDING и ставит задачу на
+        рендер в очередь. Доступ только владельцу проекта.
+      parameters:
+      - description: ID проекта
+        in: path
+        name: project_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Публикация поставлена в очередь (status=PENDING)
+          schema:
+            $ref: '#/definitions/publishing.Publication'
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "403":
+          description: Нет доступа к проекту
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "404":
+          description: Черновик не найден
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Создать публикацию
+      tags:
+      - Publications
+  /api/v1/storage/{project_id}/publications/{id}:
+    delete:
+      description: Удаляет публикацию и связанные файлы. Доступ только владельцу проекта.
+      parameters:
+      - description: ID проекта
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: ID публикации
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: Публикация удалена
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "403":
+          description: Нет доступа к проекту
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "404":
+          description: Публикация или проект не найдены
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Удалить публикацию
+      tags:
+      - Publications
+    get:
+      description: Возвращает метаданные публикации и текущий статус (PENDING, PROCESSING,
+        FINISHED, FAILED). Доступ только владельцу проекта.
+      parameters:
+      - description: ID проекта
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: ID публикации
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Метаданные публикации
+          schema:
+            $ref: '#/definitions/publishing.Publication'
+        "401":
+          description: Требуется авторизация
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "403":
+          description: Нет доступа к проекту
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "404":
+          description: Публикация или проект не найдены
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/publishing.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Получить публикацию
+      tags:
+      - Publications
   /api/v1/storage/{project_id}/versions/{version}:
     get:
       consumes:

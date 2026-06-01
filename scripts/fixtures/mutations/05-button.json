@@ -1,0 +1,16 @@
+{
+  "operation": "create",
+  "data": {
+    "element": "button",
+    "id": "lb-5",
+    "parentId": "lb-3",
+    "index": 1,
+    "styles": {
+      "backgroundColor": "#007bff",
+      "color": "#ffffff",
+      "padding": "10px"
+    },
+    "value": "Нажми меня",
+    "src": "https://example.com"
+  }
+}

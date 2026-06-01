@@ -33,6 +33,9 @@ import (
 
 	"github.com/rki-mai/wb-landing-builder/auth"
 	"github.com/rki-mai/wb-landing-builder/config"
+	"github.com/rki-mai/wb-landing-builder/publishing"
+	pubutils "github.com/rki-mai/wb-landing-builder/publishing/utils"
+	pubworker "github.com/rki-mai/wb-landing-builder/publishing/worker"
 	"github.com/rki-mai/wb-landing-builder/storage"
 
 	_ "github.com/rki-mai/wb-landing-builder/docs"
@@ -63,6 +66,41 @@ func main() {
 		log.Fatalf("Draft handler creation failed: %v", err)
 	}
 
+	initCtx, initCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer initCancel()
+
+	blobStorage, err := pubutils.NewS3BlobStorage(initCtx, cfg.S3)
+	if err != nil {
+		log.Fatalf("Failed to init blob storage: %v", err)
+	}
+
+	pubRepository, err := publishing.NewPublicationRepository(cfg.GetMongoURI(), cfg.DBConfig.Database, cfg.DBConfig.TtlDays)
+	if err != nil {
+		log.Fatalf("Failed to init publication repository: %v", err)
+	}
+
+	queue, err := pubutils.NewRabbitMQ(pubutils.RabbitMQConfig{
+		URL:   cfg.RabbitMQ.URL,
+		Queue: cfg.RabbitMQ.Queue,
+	})
+	if err != nil {
+		log.Fatalf("Failed to init rabbitmq: %v", err)
+	}
+
+	renderer := pubutils.NewCLIRenderer(cfg.Publishing.CLIPath)
+	pubDrafts := pubutils.NewStorageDraftReader(storage.NewDraftService(draftRepository, cfg))
+	pubService := publishing.NewPublicationService(pubRepository, blobStorage, renderer, pubDrafts, queue)
+	pubHandler := publishing.NewPublicationHandler(pubService)
+
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+
+	go func() {
+		if err := pubworker.New(queue, pubService).Run(workerCtx); err != nil && err != context.Canceled {
+			log.Printf("Publication worker stopped: %v", err)
+		}
+	}()
+
 	authService := auth.NewAuthService(authRepository, cfg)
 
 	authHandler := auth.NewAuthHandler(authService)
@@ -73,6 +111,7 @@ func main() {
 
 	authHandler.RegisterRoutes(mux, authMiddleware)
 	draftHandler.RegisterRoutes(mux, authMiddleware)
+	pubHandler.RegisterRoutes(mux, authMiddleware)
 
 	mux.Handle("/swagger/", httpSwagger.Handler(
 		httpSwagger.URL("/swagger/doc.json"),
@@ -99,6 +138,8 @@ func main() {
 
 	log.Println("Shutting down server...")
 
+	workerCancel()
+
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -112,6 +153,14 @@ func main() {
 
 	if err := authRepository.Close(ctx); err != nil {
 		log.Printf("Failed to close auth repository: %v", err)
+	}
+
+	if err := pubRepository.Close(ctx); err != nil {
+		log.Printf("Failed to close publication repository: %v", err)
+	}
+
+	if err := queue.Close(); err != nil {
+		log.Printf("Failed to close rabbitmq: %v", err)
 	}
 
 	log.Println("Server exited properly")
