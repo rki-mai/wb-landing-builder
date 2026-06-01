@@ -1,6 +1,7 @@
 # AI-ревью PR по запросу: напишите /review в комментарии к PR.
-# Провайдер: OpenRouter (бесплатные модели :free) — https://openrouter.ai/keys
+# Провайдер: OpenRouter — https://openrouter.ai/keys
 # Org secret: OPENROUTER_API_KEY
+# Промпт и стиль: .pr-reviewer.yml
 name: AI Code Review
 
 on:
@@ -47,26 +48,6 @@ jobs:
         with:
           ref: ${{ steps.pr.outputs.head_sha }}
 
-      - name: OpenRouter quota (before)
-        id: quota_before
-        uses: actions/github-script@v7
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        with:
-          script: |
-            const res = await fetch('https://openrouter.ai/api/v1/key', {
-              headers: { Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}` },
-            });
-            if (!res.ok) {
-              core.setFailed(`OpenRouter /key: HTTP ${res.status}`);
-              return;
-            }
-            const { data } = await res.json();
-            core.setOutput('usage_daily', String(data?.usage_daily ?? 0));
-            core.setOutput('usage_monthly', String(data?.usage_monthly ?? 0));
-            core.setOutput('limit_remaining', data?.limit_remaining == null ? 'n/a' : String(data.limit_remaining));
-            core.setOutput('is_free_tier', String(data?.is_free_tier ?? true));
-
       - name: AI review
         id: ai_review
         uses: mara-werils/ai-code-reviewer@v1
@@ -74,116 +55,16 @@ jobs:
           provider: openai
           model: openrouter/free
           api_base_url: https://openrouter.ai/api/v1
-          language: ru
-          review_style: thorough
-          max_comments: '20'
           suggest_tests: 'false'
+          auto_summarize: 'true'
+          custom_instructions: |
+            Ссылки на код для этого PR (обязательно использовать в комментариях и summary):
+            - Репозиторий: ${{ github.repository }}
+            - Head SHA: ${{ steps.pr.outputs.head_sha }}
+            - Шаблон: https://github.com/${{ github.repository }}/blob/${{ steps.pr.outputs.head_sha }}/<path>#L<line>
+            - Пример: https://github.com/${{ github.repository }}/blob/${{ steps.pr.outputs.head_sha }}/wb-landing-builder/cmd/main.go#L10-L20
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-
-      - name: Post OpenRouter usage report
-        if: always()
-        uses: actions/github-script@v7
-        env:
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          COST_USD: ${{ steps.ai_review.outputs.cost_usd }}
-          COMMENTS_COUNT: ${{ steps.ai_review.outputs.comments_count }}
-          RISK_LEVEL: ${{ steps.ai_review.outputs.risk_level }}
-          USAGE_DAILY_BEFORE: ${{ steps.quota_before.outputs.usage_daily }}
-          USAGE_MONTHLY_BEFORE: ${{ steps.quota_before.outputs.usage_monthly }}
-          LIMIT_REMAINING_BEFORE: ${{ steps.quota_before.outputs.limit_remaining }}
-          IS_FREE_TIER: ${{ steps.quota_before.outputs.is_free_tier }}
-          AI_REVIEW_OUTCOME: ${{ steps.ai_review.outcome }}
-        with:
-          script: |
-            const fmt = (n) => (Number.isFinite(n) ? n.toFixed(6) : String(n));
-            const headers = {
-              Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-              'Content-Type': 'application/json',
-              'HTTP-Referer': 'https://github.com/rki-mai/wb-landing-builder',
-              'X-OpenRouter-Title': 'wb-landing-builder-ai-review',
-            };
-
-            let after = null;
-            try {
-              const res = await fetch('https://openrouter.ai/api/v1/key', { headers });
-              if (res.ok) after = (await res.json()).data;
-            } catch (e) {
-              core.warning(`OpenRouter /key after review: ${e.message}`);
-            }
-
-            let probeText = '';
-            try {
-              const probe = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                method: 'POST',
-                headers,
-                body: JSON.stringify({
-                  model: 'openrouter/free',
-                  messages: [{ role: 'user', content: 'ping' }],
-                  max_tokens: 5,
-                }),
-              });
-              const rl = {
-                limit: probe.headers.get('x-ratelimit-limit'),
-                remaining: probe.headers.get('x-ratelimit-remaining'),
-                reset: probe.headers.get('x-ratelimit-reset'),
-                retryAfter: probe.headers.get('retry-after'),
-              };
-              if (probe.ok) {
-                probeText = `**Пробный API-запрос:** OK (rate limit ${rl.remaining ?? '?'}/${rl.limit ?? '?'})`;
-              } else {
-                const errBody = await probe.text();
-                probeText = `**Пробный API-запрос:** HTTP ${probe.status}\n\`\`\`\n${errBody.slice(0, 900)}\n\`\`\`\nRate headers: \`${JSON.stringify(rl)}\``;
-              }
-            } catch (e) {
-              probeText = `**Пробный API-запрос:** ${e.message}`;
-            }
-
-            const beforeDaily = Number(process.env.USAGE_DAILY_BEFORE);
-            const afterDaily = after?.usage_daily ?? beforeDaily;
-            const deltaDaily = afterDaily - beforeDaily;
-
-            const limitRem = after?.limit_remaining ?? process.env.LIMIT_REMAINING_BEFORE;
-            const prepaidBalance =
-              limitRem === 'n/a' || limitRem == null
-                ? 'нет prepaid-баланса (free tier, $0 за токены — это норма)'
-                : fmt(Number(limitRem));
-
-            const freeNote = process.env.IS_FREE_TIER === 'true'
-              ? '> **$0 в usage ≠ безлимит.** Free tier ограничен **числом запросов** (~50/день, ~20/мин). Неудачные вызовы тоже считаются. См. [limits](https://openrouter.ai/docs/api/reference/limits) и [FAQ](https://openrouter.zendesk.com/hc/en-us/articles/39501163636379-OpenRouter-Rate-Limits-What-You-Need-to-Know).'
-              : '';
-
-            const reviewFailed = process.env.AI_REVIEW_OUTCOME !== 'success';
-            const failHint = reviewFailed
-              ? '\n⚠️ **AI review** упал — смотри пробный запрос выше и лог шага *AI review*. 429 при $0 usage = лимит **запросов** или очередь у free-провайдера, не «кончились деньги».'
-              : '';
-            const body = [
-              '### 📊 Расход OpenRouter за этот `/review`',
-              '',
-              '| | |',
-              '|---|---|',
-              `| Стоимость ревью (action) | **$${process.env.COST_USD || '0'}** |`,
-              `| Комментариев в PR | ${process.env.COMMENTS_COUNT || '—'} |`,
-              `| Кредиты ($) сегодня (до → после) | ${fmt(beforeDaily)} → ${fmt(afterDaily)} (**Δ ${fmt(deltaDaily)}**) |`,
-              `| Prepaid-баланс | ${prepaidBalance} |`,
-              `| Модель | \`openrouter/free\` |`,
-              '',
-              probeText,
-              '',
-              freeNote,
-              failHint,
-              '',
-              '<sub>Кредиты ($) и число API-запросов — разные счётчики. Запросы: <a href="https://openrouter.ai/activity">Activity</a>.</sub>',
-            ]
-              .filter(Boolean)
-              .join('\n');
-
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body,
-            });
 
       - name: React success
         if: success()
