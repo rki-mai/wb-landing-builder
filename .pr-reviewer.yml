@@ -1,0 +1,19 @@
+review_style: thorough
+max_comments: 20
+language: ru
+
+custom_instructions: |
+  - Проект: backend конструктора лендингов на Go (Gin, MongoDB, RabbitMQ, S3/MinIO)
+  - Исходники лежат в каталоге wb-landing-builder/
+  - Комментарии пиши на русском
+  - Обращай внимание на: обработку ошибок, HTTP status codes, SQL/NoSQL injection, утечки goroutine,
+    корректность контекста (context.Context), race conditions, валидацию входных данных
+  - Не придирайся к форматированию — за это отвечает gofmt
+  - В конце итогового summary одной строкой укажи ориентировочную стоимость ревью в USD (если известна из ответа API)
+  - Лимиты OpenRouter в summary не выдумывай — их публикует отдельный комментарий workflow после ревью
+
+ignore_paths:
+  - wb-landing-builder/docs/docs.go
+  - wb-landing-builder/docs/swagger.json
+  - wb-landing-builder/docs/swagger.yaml
+  - "**/*.lock"
