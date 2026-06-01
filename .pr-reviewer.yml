@@ -1,6 +1,6 @@
 review_language: ru
 review_style: thorough
-max_comments: 12
+max_comments: 8
 max_diff_size: 20000
 
 ignore_paths:

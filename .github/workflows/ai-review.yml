@@ -52,12 +52,13 @@ jobs:
         uses: mara-werils/ai-code-reviewer@v1
         with:
           provider: openai
-          # Конкретная модель стабильнее openrouter/free; json_mode ломается при обрезке ответа
-          model: meta-llama/llama-3.3-70b-instruct:free
+          # llama :free часто 429 upstream; openrouter/free — роутер, пропускает перегруженные модели
+          # альтернатива вручную: qwen/qwen3-coder:free или google/gemma-3-12b-it:free
+          model: openrouter/free
           api_base_url: https://openrouter.ai/api/v1
           language: ru
           review_style: thorough
-          max_comments: '12'
+          max_comments: '8'
           suggest_tests: 'false'
           auto_summarize: 'true'
           custom_instructions: |
@@ -79,7 +80,7 @@ jobs:
             - Экранируй кавычки и переносы в строках JSON (\n, \")
             - body каждого комментария — до 4 предложений + одна ссылка; без длинных простыней
             - suggestion-блоки — только короткий фрагмент кода (до ~8 строк)
-            - Не более 12 comments; приоритет: security, bugs, контракты API
+            - Не более 8 comments; приоритет: security, bugs, контракты API
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 
