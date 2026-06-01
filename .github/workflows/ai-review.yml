@@ -65,18 +65,35 @@ jobs:
             core.setOutput('limit_remaining', data?.limit_remaining == null ? 'unlimited' : String(data.limit_remaining));
             core.setOutput('is_free_tier', String(data?.is_free_tier ?? true));
 
+      - name: Verify OpenRouter API
+        env:
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          set -euo pipefail
+          echo "Checking API key..."
+          curl -fsS "https://openrouter.ai/api/v1/key" \
+            -H "Authorization: Bearer ${OPENROUTER_API_KEY}" | head -c 500
+          echo ""
+          echo "Checking chat completions..."
+          curl -fsS "https://openrouter.ai/api/v1/chat/completions" \
+            -H "Authorization: Bearer ${OPENROUTER_API_KEY}" \
+            -H "Content-Type: application/json" \
+            -H "HTTP-Referer: https://github.com/rki-mai/wb-landing-builder" \
+            -H "X-OpenRouter-Title: wb-landing-builder-ai-review" \
+            -d '{"model":"meta-llama/llama-3.3-70b-instruct:free","messages":[{"role":"user","content":"ping"}],"max_tokens":8}'
+
       - name: AI review
         id: ai_review
         uses: mara-werils/ai-code-reviewer@v1
         with:
           provider: openai
           model: meta-llama/llama-3.3-70b-instruct:free
+          api_base_url: https://openrouter.ai/api/v1
           language: ru
           review_style: thorough
           max_comments: '20'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          API_BASE_URL: https://openrouter.ai/api/v1
 
       - name: Post OpenRouter usage report
         if: always()
@@ -122,6 +139,9 @@ jobs:
               : '';
 
             const reviewFailed = process.env.AI_REVIEW_OUTCOME !== 'success';
+            const failHint = reviewFailed
+              ? '\n💡 Если снова падает **AI review**: открой лог job → шаг *AI review*. Частая причина — не задан `api_base_url` (запросы уходят на OpenAI вместо OpenRouter).'
+              : '';
             const body = [
               '### 📊 Расход OpenRouter за этот `/review`',
               '',
@@ -136,7 +156,9 @@ jobs:
               `| Модель | \`meta-llama/llama-3.3-70b-instruct:free\` |`,
               '',
               freeNote,
-              reviewFailed ? '\n⚠️ Шаг AI review завершился с ошибкой — цифры кредитов могут не отражать полный прогон.' : '',
+              reviewFailed
+                ? '\n⚠️ Шаг AI review завершился с ошибкой — цифры кредитов могут не отражать полный прогон.' + failHint
+                : '',
               '',
               '<sub>Данные: <code>GET /api/v1/key</code> · <a href="https://openrouter.ai/activity">активность в OpenRouter</a></sub>',
             ]
