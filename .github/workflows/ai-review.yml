@@ -42,18 +42,44 @@ jobs:
             });
             core.setOutput('head_sha', pr.data.head.sha);
             core.setOutput('head_ref', pr.data.head.ref);
+            core.setOutput('pr_number', String(context.issue.number));
 
       - uses: actions/checkout@v4
         with:
           ref: ${{ steps.pr.outputs.head_sha }}
+
+      - name: Build PR diff link map
+        id: diff_links
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const crypto = require('crypto');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.issue.number;
+            const headSha = '${{ steps.pr.outputs.head_sha }}';
+            const base = `https://github.com/${owner}/${repo}/pull/${prNumber}/changes/${headSha}`;
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: prNumber,
+              per_page: 100,
+            });
+
+            const lines = files.map((f) => {
+              const hash = crypto.createHash('sha256').update(f.filename).digest('hex');
+              return `${f.filename} → ${base}#diff-${hash}R<line> (диапазон: R10-R15)`;
+            });
+
+            core.setOutput('base_url', base);
+            core.setOutput('map', lines.join('\n'));
 
       - name: AI review
         id: ai_review
         uses: mara-werils/ai-code-reviewer@v1
         with:
           provider: openai
-          # llama :free часто 429 upstream; openrouter/free — роутер, пропускает перегруженные модели
-          # альтернатива вручную: qwen/qwen3-coder:free или google/gemma-3-12b-it:free
           model: openrouter/free
           api_base_url: https://openrouter.ai/api/v1
           language: ru
@@ -66,23 +92,96 @@ jobs:
 
             Язык: русский во всех полях JSON (summary, body комментариев).
 
-            Ссылки на код (обязательно):
-            - Head SHA: ${{ steps.pr.outputs.head_sha }}
-            - Шаблон: https://github.com/${{ github.repository }}/blob/${{ steps.pr.outputs.head_sha }}/<path>#L<line>
-            - В каждом comment.body — markdown-ссылка вида [файл:строки](URL)
-            - В summary — список bullet с ссылками на ключевые места
+            Формат ревью — ТОЛЬКО ТЕКСТ, без патчей:
+            - ЗАПРЕЩЕНО: ```suggestion, ```diff, блоки кода с «исправленным» кодом, «Suggested change»
+            - Пиши словами: что хорошо, что плохо, какой риск, что проверить/переделать
+            - Для каждого замечания: 3–6 предложений, конкретика (функции, типы, сценарии)
+            - Явно отмечай удачные решения (не только ошибки)
 
-            Глубина: для warning/critical — что не так → риск → как исправить (имена функций/типов).
-            Не комментируй gofmt/goimports. Не пиши про стоимость API.
+            Ссылки на строки в diff PR (обязательно в каждом comment.body и в summary):
+            - Номера — правая сторона diff: R23 или R23-R31 (не L, не blob-ссылки)
+            - Формат markdown: [файл:R23-R31](URL)
+            - URL = pull/.../changes/HEAD_SHA#diff-HASH + R-строки (HASH = sha256 пути файла)
 
-            Критично для парсинга (action ждёт строгий JSON, лимит ~4096 токенов на ответ):
-            - Ответ — только один валидный JSON-объект, без текста до/после
-            - Экранируй кавычки и переносы в строках JSON (\n, \")
-            - body каждого комментария — до 4 предложений + одна ссылка; без длинных простыней
-            - suggestion-блоки — только короткий фрагмент кода (до ~8 строк)
-            - Не более 8 comments; приоритет: security, bugs, контракты API
+            Карта файлов → URL (подставь line / диапазон вместо <line>):
+            ${{ steps.diff_links.outputs.map }}
+
+            Summary PR: 2–3 абзаца + список «✅ хорошо» / «⚠️ замечания» с ссылками [path:Rxx](url).
+
+            JSON (лимит ~4096 токенов): только валидный JSON; body без переносов через \n; без code blocks.
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+
+      - name: Fix review comments (no suggestions, PR diff links)
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const crypto = require('crypto');
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = Number('${{ steps.pr.outputs.pr_number }}');
+            const headSha = '${{ steps.pr.outputs.head_sha }}';
+            const baseUrl = '${{ steps.diff_links.outputs.base_url }}';
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number: prNumber,
+              per_page: 100,
+            });
+            const hashByPath = Object.fromEntries(
+              files.map((f) => [
+                f.filename,
+                crypto.createHash('sha256').update(f.filename).digest('hex'),
+              ]),
+            );
+
+            const diffLink = (path, start, end) => {
+              const hash = hashByPath[path];
+              if (!hash) return null;
+              const anchor = start !== end ? `R${start}-R${end}` : `R${end}`;
+              return `${baseUrl}#diff-${hash}${anchor}`;
+            };
+
+            const comments = await github.paginate(github.rest.pulls.listReviewComments, {
+              owner,
+              repo,
+              pull_number: prNumber,
+              per_page: 100,
+            });
+
+            const cutoff = Date.now() - 20 * 60 * 1000;
+            const bot = 'github-actions[bot]';
+
+            for (const c of comments) {
+              if (c.user.login !== bot) continue;
+              if (new Date(c.created_at).getTime() < cutoff) continue;
+
+              let body = c.body;
+              const start = c.start_line || c.line;
+              const end = c.line;
+              const anchor = start !== end ? `R${start}-R${end}` : `R${end}`;
+              const url = diffLink(c.path, start, end);
+
+              body = body.replace(/```suggestion[\s\S]*?```/gi, '');
+              body = body.replace(/```(?:diff|patch)[\s\S]*?```/gi, '');
+              body = body.replace(/\nSuggested change[\s\S]*?(?=\n\n|$)/gi, '');
+
+              if (url && !body.includes(`#diff-${hashByPath[c.path]}`)) {
+                body = `${body.trim()}\n\n📍 [${c.path}:${anchor}](${url})`;
+              }
+
+              body = body.replace(/\n{3,}/g, '\n\n').trim();
+              if (body && body !== c.body) {
+                await github.rest.pulls.updateReviewComment({
+                  owner,
+                  repo,
+                  comment_id: c.id,
+                  body,
+                });
+              }
+            }
 
       - name: React success
         if: success()
