@@ -328,6 +328,27 @@ main() {
   done
   [[ "$status" == "FINISHED" ]] || fail "Publication did not reach FINISHED within timeout (last status=${status:-unknown})"
 
+  log "Fetch rendered landing via CDN"
+  local public_url html_body html_code content_type
+  public_url="$(echo "$pub_meta" | jq -r '.public_url')"
+  [[ -n "$public_url" && "$public_url" != "null" ]] || fail "Expected public_url in publication metadata"
+  [[ "$public_url" == "${BASE_URL}/publications/${publication_id}/index.html" ]] \
+    || fail "Unexpected public_url: ${public_url}"
+  html_body="$(
+    curl -sS "${BASE_URL}/publications/${publication_id}/index.html" \
+      -w $'\n__HTTP_CODE__:%{http_code}'
+  )"
+  html_code="${html_body##*$'\n'__HTTP_CODE__:}"
+  html_body="${html_body%%$'\n'__HTTP_CODE__:*}"
+  [[ "$html_code" == "200" ]] || fail "CDN GET expected HTTP 200, got ${html_code}"
+  content_type="$(
+    curl -sS -o /dev/null -D - "${BASE_URL}/publications/${publication_id}/index.html" \
+      | awk 'tolower($1) == "content-type:" { print $2; exit }' | tr -d '\r'
+  )"
+  [[ "$content_type" == text/html* ]] || fail "Expected Content-Type text/html, got ${content_type:-empty}"
+  [[ -n "$html_body" ]] || fail "Empty HTML body from CDN"
+  log_ok "CDN returned HTTP 200 (${content_type}), public_url=${public_url}"
+
   log "List publication IDs"
   local ids
   ids="$(json_get "/api/v1/storage/${PROJECT_ID}/publications" 200 "$token")"

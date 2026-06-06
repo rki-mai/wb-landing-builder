@@ -25,6 +25,7 @@ type Config struct {
 	S3           S3Config
 	Publishing   PublishingConfig
 	RabbitMQ     RabbitMQConfig
+	PublicBaseURL string
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	RateLimit    int
@@ -111,6 +112,7 @@ func Load() *Config {
 			URL:   getEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/"),
 			Queue: getEnv("RABBITMQ_PUBLISH_QUEUE", "publish.requests"),
 		},
+		PublicBaseURL: getEnv("PUBLIC_BASE_URL", "http://localhost:8080"),
 	}
 }
 
