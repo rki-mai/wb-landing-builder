@@ -374,6 +374,13 @@ main() {
   json_delete "/api/v1/storage/${PROJECT_ID}/publications/${publication_id}" 204 "$token"
   log_ok "deleted ${publication_id}"
 
+  log "Verify deleted publication is unavailable via CDN"
+  html_code="$(
+    curl -sS -o /dev/null -w '%{http_code}' "${BASE_URL}/publications/${publication_id}/index.html"
+  )"
+  [[ "$html_code" == "404" ]] || fail "CDN GET after delete expected HTTP 404, got ${html_code}"
+  log_ok "CDN returned HTTP 404 for deleted publication"
+
   log "Verify publication list is empty"
   ids="$(json_get "/api/v1/storage/${PROJECT_ID}/publications" 200 "$token")"
   local list_len

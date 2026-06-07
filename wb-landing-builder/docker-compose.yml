@@ -110,7 +110,10 @@ services:
       - PUBLISHING_CLI_PATH=/app/cli/generate.py
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - RABBITMQ_PUBLISH_QUEUE=publish.requests
+      - CDN_CACHE_PATH=/var/cache/nginx/publications
       - PUBLIC_BASE_URL=http://localhost:8080
+    volumes:
+      - cdn-cache:/var/cache/nginx/publications
     depends_on:
       mongo:
         condition: service_healthy
@@ -135,6 +138,7 @@ services:
       - "8080:80"
     volumes:
       - ./docker/cdn/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - cdn-cache:/var/cache/nginx/publications
     depends_on:
       wb-landing-builder:
         condition: service_healthy
@@ -153,6 +157,8 @@ volumes:
   mongodata:
     driver: local
   miniodata:
+    driver: local
+  cdn-cache:
     driver: local
 
 networks:

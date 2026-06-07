@@ -25,6 +25,7 @@ type Config struct {
 	S3           S3Config
 	Publishing   PublishingConfig
 	RabbitMQ     RabbitMQConfig
+	CDN          CDNConfig
 	PublicBaseURL string
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
@@ -47,6 +48,10 @@ type PublishingConfig struct {
 type RabbitMQConfig struct {
 	URL   string
 	Queue string
+}
+
+type CDNConfig struct {
+	CachePath string
 }
 
 type DatabaseConfig struct {
@@ -111,6 +116,9 @@ func Load() *Config {
 		RabbitMQ: RabbitMQConfig{
 			URL:   getEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/"),
 			Queue: getEnv("RABBITMQ_PUBLISH_QUEUE", "publish.requests"),
+		},
+		CDN: CDNConfig{
+			CachePath: getEnv("CDN_CACHE_PATH", "/var/cache/nginx/publications"),
 		},
 		PublicBaseURL: getEnv("PUBLIC_BASE_URL", "http://localhost:8080"),
 	}

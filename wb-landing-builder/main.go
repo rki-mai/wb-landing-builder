@@ -89,7 +89,8 @@ func main() {
 
 	renderer := pubutils.NewCLIRenderer(cfg.Publishing.CLIPath)
 	pubDrafts := pubutils.NewStorageDraftReader(storage.NewDraftService(draftRepository, cfg))
-	pubService := publishing.NewPublicationService(pubRepository, blobStorage, renderer, pubDrafts, queue)
+	cachePurger := pubutils.NewFileCDNCachePurger(cfg.CDN.CachePath)
+	pubService := publishing.NewPublicationService(pubRepository, blobStorage, renderer, pubDrafts, queue, cachePurger)
 	pubHandler := publishing.NewPublicationHandler(pubService, cfg.PublicBaseURL)
 
 	workerCtx, workerCancel := context.WithCancel(context.Background())
