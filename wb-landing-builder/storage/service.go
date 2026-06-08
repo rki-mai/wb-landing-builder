@@ -62,30 +62,33 @@ func toMap(v interface{}) (map[string]interface{}, bool) {
 	}
 }
 
-// CheckOwnership проверяет, что userID совпадает с владельцем черновика проекта.
+// CheckOwnership проверяет, что userID совпадает с владельцем проекта.
 func (s *DraftService) CheckOwnership(ctx context.Context, projectID, userID string) error {
-	ownerID, err := s.repo.GetDraftOwner(ctx, projectID)
+	project, err := s.repo.GetProject(ctx, projectID)
 	if err != nil {
 		return err
 	}
-	if ownerID == "" {
-		return ErrDraftNotFound
+	if project == nil {
+		return ErrProjectNotFound
 	}
+
+	ownerID, ok := project["owner_id"].(string)
+	if !ok || ownerID == "" {
+		return ErrProjectNotFound
+	}
+
 	if ownerID != userID {
 		return ErrForbidden
 	}
+
 	return nil
 }
 
 func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, userID string, mutation Mutation) (int, error) {
 	s.semaphore <- struct{}{}
 	defer func() { <-s.semaphore }()
-	ownerID, err := s.repo.GetDraftOwner(ctx, projectID)
-	if err != nil {
+	if err := s.CheckOwnership(ctx, projectID, userID); err != nil {
 		return 0, err
-	}
-	if ownerID != "" && ownerID != userID {
-		return 0, ErrForbidden
 	}
 	mutationToInsert := mutation.Data
 	mutationToInsert["deleted"] = mutation.Operation == OperationDelete
@@ -205,6 +208,29 @@ func (s *DraftService) GetDraft(ctx context.Context, projectID string, userID st
 
 func (s *DraftService) GetLatestDraft(ctx context.Context, projectID string, userID string) ([]byte, error) {
 	return s.GetDraft(ctx, projectID, userID, math.MaxInt)
+}
+
+func (s *DraftService) CreateProject(ctx context.Context, projectID string, ownerID string) error {
+	s.semaphore <- struct{}{}
+	defer func() { <-s.semaphore }()
+
+	project, err := s.repo.GetProject(ctx, projectID)
+	if err != nil {
+		return err
+	}
+
+	if project != nil {
+		return ErrProjectAlreadyExists
+	}
+
+	return s.repo.CreateProject(ctx, projectID, ownerID)
+}
+
+func (s *DraftService) GetProject(ctx context.Context, projectID string) (bson.M, error) {
+	s.semaphore <- struct{}{}
+	defer func() { <-s.semaphore }()
+
+	return s.repo.GetProject(ctx, projectID)
 }
 
 func getMaxVersion(elements []bson.M) int {

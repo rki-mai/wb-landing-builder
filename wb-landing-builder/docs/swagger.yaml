@@ -124,6 +124,24 @@ definitions:
         type: string
     type: object
   storage.Mutation:
+    description: Объект мутации, применяемый к черновику.
+    properties:
+      data:
+        description: |-
+          Data полезные данные мутации. Структура зависит от типа операции.
+          Для 'create' может содержать тип элемента и его свойства.
+          Для 'update' содержит ID элемента и новые значения.
+          Для 'delete' содержит ID элемента.
+        type: object
+        x-example: '{"id":"header-1","content":"Hello World"}'
+      operation:
+        allOf:
+        - $ref: '#/definitions/storage.OperationType'
+        description: |-
+          Operation тип операции: create, update или delete.
+          Required: true
+          Enum: [create, update, delete]
+        example: create
     type: object
   storage.OperationType:
     enum:
@@ -264,7 +282,39 @@ paths:
       summary: Регистрация
       tags:
       - Auth
-  /api/v1/storage/{project_id}:
+  /api/v1/projects:
+    post:
+      consumes:
+      - application/json
+      description: Создает новый проект и назначает владельцем текущего авторизованного
+        пользователя.
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: ID созданного проекта
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Пользователь не авторизован
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "409":
+          description: Проект уже существует
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "500":
+          description: Ошибка создания проекта
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Создать проект
+      tags:
+      - Storage
+  /api/v1/projects/{project_id}/draft:
     get:
       consumes:
       - application/json
@@ -286,6 +336,18 @@ paths:
           description: Отсутствует project_id
           schema:
             $ref: '#/definitions/storage.ErrorResponse'
+        "401":
+          description: Пользователь не авторизован
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "403":
+          description: Доступ запрещен
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "404":
+          description: Проект не найден
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
         "500":
           description: Ошибка получения данных
           schema:
@@ -295,7 +357,7 @@ paths:
       summary: Получить последний черновик
       tags:
       - Storage
-  /api/v1/storage/{project_id}/mutations:
+  /api/v1/projects/{project_id}/draft/mutations:
     post:
       consumes:
       - application/json
@@ -324,6 +386,18 @@ paths:
           description: Ошибка валидации или неверный запрос
           schema:
             $ref: '#/definitions/storage.ErrorResponse'
+        "401":
+          description: Пользователь не авторизован
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "403":
+          description: Доступ запрещен
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "404":
+          description: Мутация или проект не найдены
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
         "413":
           description: Превышен размер payload
           schema:
@@ -341,7 +415,55 @@ paths:
       summary: Применить мутацию
       tags:
       - Storage
-  /api/v1/storage/{project_id}/publications:
+  /api/v1/projects/{project_id}/draft/versions/{version}:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает страницу указанной версии для проекта.
+      parameters:
+      - description: ID проекта
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: Номер версии
+        in: path
+        name: version
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: JSON контент страницы
+          schema:
+            type: string
+        "400":
+          description: Неверный ID или версия
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "401":
+          description: Пользователь не авторизован
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "403":
+          description: Доступ запрещен
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "404":
+          description: Проект не найден
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "500":
+          description: Ошибка получения данных
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Получить версию черновика
+      tags:
+      - Storage
+  /api/v1/projects/{project_id}/publications:
     get:
       description: Возвращает ID всех публикаций для указанного проекта (от новых
         к старым). Доступ только владельцу проекта.
@@ -416,7 +538,7 @@ paths:
       summary: Создать публикацию
       tags:
       - Publications
-  /api/v1/storage/{project_id}/publications/{id}:
+  /api/v1/projects/{project_id}/publications/{id}:
     delete:
       description: Удаляет публикацию и связанные файлы. Доступ только владельцу проекта.
       parameters:
@@ -496,42 +618,6 @@ paths:
       summary: Получить публикацию
       tags:
       - Publications
-  /api/v1/storage/{project_id}/versions/{version}:
-    get:
-      consumes:
-      - application/json
-      description: Возвращает страницу указанной версии для проекта.
-      parameters:
-      - description: ID проекта
-        in: path
-        name: project_id
-        required: true
-        type: string
-      - description: Номер версии
-        in: path
-        name: version
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: JSON контент страницы
-          schema:
-            type: string
-        "400":
-          description: Неверный ID или версия
-          schema:
-            $ref: '#/definitions/storage.ErrorResponse'
-        "500":
-          description: Ошибка получения данных
-          schema:
-            $ref: '#/definitions/storage.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Получить версию черновика
-      tags:
-      - Storage
 schemes:
 - http
 securityDefinitions:

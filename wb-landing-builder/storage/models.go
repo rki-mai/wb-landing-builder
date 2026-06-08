@@ -36,7 +36,17 @@ type Mutation struct {
 	// Для 'create' может содержать тип элемента и его свойства.
 	// Для 'update' содержит ID элемента и новые значения.
 	// Для 'delete' содержит ID элемента.
-	Data bson.M `json:"data" swaggertype:"object" example:"{\"id\":\"header-1\",\"content\":\"Hello World\"}"`
+	Data bson.M `json:"data" swaggertype:"object" extensions:"x-example={\"id\":\"header-1\",\"content\":\"Hello World\"}"`
+}
+
+// Project представляет пользовательский проект.
+// @Description Проект пользователя.
+type Project struct {
+	// ID уникальный идентификатор проекта.
+	ID string `json:"id" example:"project-123"`
+
+	// Name отображаемое имя проекта.
+	Name string `json:"name" example:"Landing Page"`
 }
 
 // ErrorResponse стандартный формат ответа об ошибке.

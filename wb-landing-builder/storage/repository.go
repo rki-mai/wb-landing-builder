@@ -15,11 +15,13 @@ type DraftRepository interface {
 	GetDraft(ctx context.Context, projectID string, version int) (bson.M, error)
 	InsertDraft(ctx context.Context, projectID string, ownerID string, draft []bson.M, version int) error
 
-	GetDraftOwner(ctx context.Context, projectID string) (string, error)
 	GetLatestMutationForID(ctx context.Context, projectID string, elementID string) (bson.M, error)
 	GetLatestMutationVersion(ctx context.Context, projectID string) (int, error)
 	GetMutationsInRange(ctx context.Context, projectID string, from int, to int) (*[]bson.M, error)
 	InsertMutation(ctx context.Context, projectID string, ownerID string, mutation bson.M) (int, error)
+
+	CreateProject(ctx context.Context, projectID string, ownerID string) error
+	GetProject(ctx context.Context, projectID string) (bson.M, error)
 
 	Close(ctx context.Context) error
 }
@@ -27,6 +29,7 @@ type DraftRepository interface {
 type draftRepository struct {
 	draftsCollection    *mongo.Collection
 	mutationsCollection *mongo.Collection
+	projectsCollection  *mongo.Collection
 	client              *mongo.Client
 }
 
@@ -53,10 +56,11 @@ func NewDraftRepository(uri string, dbName string, ttlDays int) (DraftRepository
 	repo := &draftRepository{
 		draftsCollection:    db.Collection("drafts"),
 		mutationsCollection: db.Collection("mutations"),
+		projectsCollection:  db.Collection("projects"),
 		client:              client,
 	}
 
-	if err = createIndexes(repo.draftsCollection, repo.mutationsCollection, ttlDays); err != nil {
+	if err = createIndexes(repo.draftsCollection, repo.mutationsCollection, repo.projectsCollection, ttlDays); err != nil {
 		return nil, fmt.Errorf("mongo index create error: %w", err)
 	}
 
@@ -64,7 +68,7 @@ func NewDraftRepository(uri string, dbName string, ttlDays int) (DraftRepository
 	return repo, nil
 }
 
-func createIndexes(draftsCollection, mutationsCollection *mongo.Collection, ttlDays int) error {
+func createIndexes(draftsCollection *mongo.Collection, mutationsCollection *mongo.Collection, projectsCollection *mongo.Collection, ttlDays int) error {
 	_, err := draftsCollection.Indexes().CreateOne(context.Background(), mongo.IndexModel{
 		Keys: bson.D{{Key: "project_id", Value: 1}, {Key: "version", Value: 1}},
 	})
@@ -97,6 +101,13 @@ func createIndexes(draftsCollection, mutationsCollection *mongo.Collection, ttlD
 	_, err = mutationsCollection.Indexes().CreateOne(context.Background(), mongo.IndexModel{
 		Keys:    bson.D{{Key: "created_at", Value: 1}},
 		Options: options.Index().SetExpireAfterSeconds(int32(ttlDays * 24 * 3600)),
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = projectsCollection.Indexes().CreateOne(context.Background(), mongo.IndexModel{
+		Keys: bson.D{{Key: "owner_id", Value: 1}},
 	})
 	if err != nil {
 		return err
@@ -143,25 +154,6 @@ func (r *draftRepository) InsertDraft(ctx context.Context, projectID string, own
 	}
 
 	return nil
-}
-
-func (r *draftRepository) GetDraftOwner(ctx context.Context, projectID string) (string, error) {
-	filter := bson.M{
-		"project_id": projectID,
-		"owner_id":   bson.M{"$exists": true, "$ne": ""},
-	}
-	opts := options.FindOne().SetSort(bson.D{{Key: "version", Value: -1}})
-	var result struct {
-		OwnerID string `bson:"owner_id"`
-	}
-	err := r.mutationsCollection.FindOne(ctx, filter, opts).Decode(&result)
-	if err == mongo.ErrNoDocuments {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return result.OwnerID, nil
 }
 
 func (r *draftRepository) GetLatestMutationForID(ctx context.Context, projectID string, elementID string) (bson.M, error) {
@@ -244,4 +236,34 @@ func (r *draftRepository) InsertMutation(ctx context.Context, projectID string, 
 	}
 
 	return latestVersion + 1, nil
+}
+
+func (r *draftRepository) CreateProject(ctx context.Context, projectID string, ownerID string) error {
+	project := bson.M{
+		"project_id": projectID,
+		"owner_id":   ownerID,
+		"created_at": time.Now(),
+	}
+
+	_, err := r.projectsCollection.InsertOne(ctx, project)
+	if err != nil {
+		return fmt.Errorf("insert project error: %w", err)
+	}
+
+	return nil
+}
+
+func (r *draftRepository) GetProject(ctx context.Context, projectID string) (bson.M, error) {
+	filter := bson.M{
+		"project_id": projectID,
+	}
+	var project bson.M
+	err := r.projectsCollection.FindOne(ctx, filter).Decode(&project)
+	if err == mongo.ErrNoDocuments {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("find project error: %w", err)
+	}
+	return project, nil
 }

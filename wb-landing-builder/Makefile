@@ -40,7 +40,7 @@ swag-docker: ## Generate Swagger docs via Docker (Go on host not required)
 		-v "$(CURDIR):/app" \
 		-w /app \
 		golang:1.25.10-alpine \
-		sh -c 'apk add --no-cache git && go install github.com/swaggo/swag/cmd/swag@$(SWAG_VERSION) && /root/go/bin/swag init -g main.go -o docs --parseDependency --parseInternal'
+		sh -c 'apk add --no-cache git && go install github.com/swaggo/swag/cmd/swag@$(SWAG_VERSION) && $$(go env GOPATH)/bin/swag init -g main.go -o docs --parseDependency --parseInternal'
 
 rebuild: swag up ## Regenerate Swagger and rebuild/restart API container
 

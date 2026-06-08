@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/xeipuuv/gojsonschema"
 
 	"github.com/rki-mai/wb-landing-builder/auth"
@@ -132,15 +133,19 @@ func (h *DraftHandler) RegisterRoutes(
 	middleware func(http.Handler) http.Handler,
 ) {
 	mux.Handle(
-		"POST /api/v1/storage/{project_id}/mutations",
+		"POST /api/v1/projects",
+		middleware(http.HandlerFunc(h.createProject)),
+	)
+	mux.Handle(
+		"POST /api/v1/projects/{project_id}/draft/mutations",
 		middleware(http.HandlerFunc(h.applyMutation)),
 	)
 	mux.Handle(
-		"GET /api/v1/storage/{project_id}",
+		"GET /api/v1/projects/{project_id}/draft",
 		middleware(http.HandlerFunc(h.sendLatestPage)),
 	)
 	mux.Handle(
-		"GET /api/v1/storage/{project_id}/versions/{version}",
+		"GET /api/v1/projects/{project_id}/draft/versions/{version}",
 		middleware(http.HandlerFunc(h.sendPage)),
 	)
 }
@@ -161,6 +166,40 @@ func (h *DraftHandler) handleLimit(w http.ResponseWriter, projectID string) bool
 	return true
 }
 
+// CreateProject создает новый пустой проект.
+// @Summary Создать проект
+// @Description Создает новый проект и назначает владельцем текущего авторизованного пользователя.
+// @Tags Storage
+// @Accept json
+// @Security BearerAuth
+// @Produce json
+// @Success 201 {object} map[string]string "ID созданного проекта"
+// @Failure 401 {object} ErrorResponse "Пользователь не авторизован"
+// @Failure 409 {object} ErrorResponse "Проект уже существует"
+// @Failure 500 {object} ErrorResponse "Ошибка создания проекта"
+// @Router /api/v1/projects [post]
+func (h *DraftHandler) createProject(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(auth.UserIDKey).(string)
+
+	if !ok {
+		httputil.WriteJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	projectID := uuid.NewString()
+	err := h.service.CreateProject(r.Context(), projectID, userID)
+	if err != nil {
+		if errors.Is(err, ErrProjectAlreadyExists) {
+			httputil.WriteJSONError(w, http.StatusConflict, err.Error())
+			return
+		}
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to create project: "+err.Error())
+		return
+	}
+
+	httputil.WriteJSONResponse(w, http.StatusCreated, map[string]string{"project_id": projectID})
+}
+
 // ApplyMutation применяет мутацию к черновику страницы проекта.
 // @Summary Применить мутацию
 // @Description Применяет JSON-мутацию к указанному проекту после проверки схемы и лимитов.
@@ -172,10 +211,13 @@ func (h *DraftHandler) handleLimit(w http.ResponseWriter, projectID string) bool
 // @Param mutation body Mutation true "Объект мутации"
 // @Success 200 {object} ErrorResponse "Успешное применение, возвращает версию"
 // @Failure 400 {object} ErrorResponse "Ошибка валидации или неверный запрос"
+// @Failure 401 {object} ErrorResponse "Пользователь не авторизован"
+// @Failure 403 {object} ErrorResponse "Доступ запрещен"
+// @Failure 404 {object} ErrorResponse "Мутация или проект не найдены"
 // @Failure 413 {object} ErrorResponse "Превышен размер payload"
 // @Failure 429 {object} ErrorResponse "Превышен лимит запросов"
 // @Failure 500 {object} ErrorResponse "Внутренняя ошибка сервера"
-// @Router /api/v1/storage/{project_id}/mutations [post]
+// @Router /api/v1/projects/{project_id}/draft/mutations [post]
 func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 
@@ -235,6 +277,10 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
 			return
 		}
+		if errors.Is(err, ErrProjectNotFound) {
+			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
+			return
+		}
 		if errors.Is(err, ErrForbidden) {
 			httputil.WriteJSONError(w, http.StatusForbidden, err.Error())
 			return
@@ -260,8 +306,11 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 // @Param project_id path string true "ID проекта"
 // @Success 200 {object} Mutation "JSON контент страницы"
 // @Failure 400 {object} ErrorResponse "Отсутствует project_id"
+// @Failure 401 {object} ErrorResponse "Пользователь не авторизован"
+// @Failure 403 {object} ErrorResponse "Доступ запрещен"
+// @Failure 404 {object} ErrorResponse "Проект не найден"
 // @Failure 500 {object} ErrorResponse "Ошибка получения данных"
-// @Router /api/v1/storage/{project_id} [get]
+// @Router /api/v1/projects/{project_id}/draft [get]
 func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 	if projectID == "" {
@@ -277,7 +326,7 @@ func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 
 	page, err := h.service.GetLatestDraft(r.Context(), projectID, userID)
 	if err != nil {
-		if errors.Is(err, ErrDraftNotFound) {
+		if errors.Is(err, ErrProjectNotFound) {
 			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
 			return
 		}
@@ -303,8 +352,11 @@ func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 // @Param version path int true "Номер версии"
 // @Success 200 {object} string "JSON контент страницы"
 // @Failure 400 {object} ErrorResponse "Неверный ID или версия"
+// @Failure 401 {object} ErrorResponse "Пользователь не авторизован"
+// @Failure 403 {object} ErrorResponse "Доступ запрещен"
+// @Failure 404 {object} ErrorResponse "Проект не найден"
 // @Failure 500 {object} ErrorResponse "Ошибка получения данных"
-// @Router /api/v1/storage/{project_id}/versions/{version} [get]
+// @Router /api/v1/projects/{project_id}/draft/versions/{version} [get]
 func (h *DraftHandler) sendPage(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 	version, err := strconv.Atoi(r.PathValue("version"))
@@ -325,7 +377,7 @@ func (h *DraftHandler) sendPage(w http.ResponseWriter, r *http.Request) {
 
 	page, err := h.service.GetDraft(r.Context(), projectID, userID, version)
 	if err != nil {
-		if errors.Is(err, ErrDraftNotFound) {
+		if errors.Is(err, ErrProjectNotFound) {
 			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
 			return
 		}

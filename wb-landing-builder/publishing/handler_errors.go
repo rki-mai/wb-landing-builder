@@ -22,7 +22,7 @@ func writePublicationError(w http.ResponseWriter, err error) {
 		httputil.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
-	if errors.Is(err, storage.ErrDraftNotFound) {
+	if errors.Is(err, storage.ErrProjectNotFound) || errors.Is(err, storage.ErrDraftNotFound) {
 		httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
 		return
 	}

@@ -202,7 +202,56 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/storage/{project_id}": {
+        "/api/v1/projects": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Создает новый проект и назначает владельцем текущего авторизованного пользователя.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Storage"
+                ],
+                "summary": "Создать проект",
+                "responses": {
+                    "201": {
+                        "description": "ID созданного проекта",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Пользователь не авторизован",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Проект уже существует",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Ошибка создания проекта",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/projects/{project_id}/draft": {
             "get": {
                 "security": [
                     {
@@ -242,6 +291,24 @@ const docTemplate = `{
                             "$ref": "#/definitions/storage.ErrorResponse"
                         }
                     },
+                    "401": {
+                        "description": "Пользователь не авторизован",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Доступ запрещен",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Проект не найден",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
                     "500": {
                         "description": "Ошибка получения данных",
                         "schema": {
@@ -251,7 +318,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/storage/{project_id}/mutations": {
+        "/api/v1/projects/{project_id}/draft/mutations": {
             "post": {
                 "security": [
                     {
@@ -300,6 +367,24 @@ const docTemplate = `{
                             "$ref": "#/definitions/storage.ErrorResponse"
                         }
                     },
+                    "401": {
+                        "description": "Пользователь не авторизован",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Доступ запрещен",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Мутация или проект не найдены",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
                     "413": {
                         "description": "Превышен размер payload",
                         "schema": {
@@ -321,7 +406,81 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/storage/{project_id}/publications": {
+        "/api/v1/projects/{project_id}/draft/versions/{version}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает страницу указанной версии для проекта.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Storage"
+                ],
+                "summary": "Получить версию черновика",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID проекта",
+                        "name": "project_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Номер версии",
+                        "name": "version",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "JSON контент страницы",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "400": {
+                        "description": "Неверный ID или версия",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Пользователь не авторизован",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Доступ запрещен",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Проект не найден",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Ошибка получения данных",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/projects/{project_id}/publications": {
             "get": {
                 "security": [
                     {
@@ -435,7 +594,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/storage/{project_id}/publications/{id}": {
+        "/api/v1/projects/{project_id}/publications/{id}": {
             "get": {
                 "security": [
                     {
@@ -552,62 +711,6 @@ const docTemplate = `{
                         "description": "Внутренняя ошибка сервера",
                         "schema": {
                             "$ref": "#/definitions/publishing.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/storage/{project_id}/versions/{version}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Возвращает страницу указанной версии для проекта.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Storage"
-                ],
-                "summary": "Получить версию черновика",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "ID проекта",
-                        "name": "project_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Номер версии",
-                        "name": "version",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "JSON контент страницы",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "400": {
-                        "description": "Неверный ID или версия",
-                        "schema": {
-                            "$ref": "#/definitions/storage.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Ошибка получения данных",
-                        "schema": {
-                            "$ref": "#/definitions/storage.ErrorResponse"
                         }
                     }
                 }
@@ -775,7 +878,24 @@ const docTemplate = `{
             }
         },
         "storage.Mutation": {
-            "type": "object"
+            "description": "Объект мутации, применяемый к черновику.",
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Data полезные данные мутации. Структура зависит от типа операции.\nДля 'create' может содержать тип элемента и его свойства.\nДля 'update' содержит ID элемента и новые значения.\nДля 'delete' содержит ID элемента.",
+                    "type": "object",
+                    "x-example": "{\"id\":\"header-1\",\"content\":\"Hello World\"}"
+                },
+                "operation": {
+                    "description": "Operation тип операции: create, update или delete.\nRequired: true\nEnum: [create, update, delete]",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/storage.OperationType"
+                        }
+                    ],
+                    "example": "create"
+                }
+            }
         },
         "storage.OperationType": {
             "type": "string",
