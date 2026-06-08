@@ -166,6 +166,17 @@ func (h *DraftHandler) handleLimit(w http.ResponseWriter, projectID string) bool
 	return true
 }
 
+// CreateProject создает новый пустой проект.
+// @Summary Создать проект
+// @Description Создает новый проект и назначает владельцем текущего авторизованного пользователя.
+// @Tags Storage
+// @Accept json
+// @Security BearerAuth
+// @Produce json
+// @Success 201 {object} map[string]string "ID созданного проекта"
+// @Failure 401 {object} ErrorResponse "Пользователь не авторизован"
+// @Failure 500 {object} ErrorResponse "Ошибка создания проекта"
+// @Router /api/v1/projects [post]
 func (h *DraftHandler) createProject(w http.ResponseWriter, r *http.Request) {
 	userID, ok := r.Context().Value(auth.UserIDKey).(string)
 
@@ -198,7 +209,7 @@ func (h *DraftHandler) createProject(w http.ResponseWriter, r *http.Request) {
 // @Failure 413 {object} ErrorResponse "Превышен размер payload"
 // @Failure 429 {object} ErrorResponse "Превышен лимит запросов"
 // @Failure 500 {object} ErrorResponse "Внутренняя ошибка сервера"
-// @Router /api/v1/storage/{project_id}/mutations [post]
+// @Router /api/v1/projects/{project_id}/draft/mutations [post]
 func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 
@@ -284,7 +295,7 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} Mutation "JSON контент страницы"
 // @Failure 400 {object} ErrorResponse "Отсутствует project_id"
 // @Failure 500 {object} ErrorResponse "Ошибка получения данных"
-// @Router /api/v1/storage/{project_id} [get]
+// @Router /api/v1/projects/{project_id}/draft [get]
 func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 	if projectID == "" {
@@ -327,7 +338,7 @@ func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} string "JSON контент страницы"
 // @Failure 400 {object} ErrorResponse "Неверный ID или версия"
 // @Failure 500 {object} ErrorResponse "Ошибка получения данных"
-// @Router /api/v1/storage/{project_id}/versions/{version} [get]
+// @Router /api/v1/projects/{project_id}/draft/versions/{version} [get]
 func (h *DraftHandler) sendPage(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 	version, err := strconv.Atoi(r.PathValue("version"))
