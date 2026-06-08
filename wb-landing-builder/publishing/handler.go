@@ -18,10 +18,10 @@ func NewPublicationHandler(service *PublicationService) *Handler {
 
 // RegisterRoutes регистрирует маршруты публикаций (за middleware авторизации).
 func (h *Handler) RegisterRoutes(mux *http.ServeMux, middleware func(http.Handler) http.Handler) {
-	mux.Handle("GET /api/v1/storage/{project_id}/publications", middleware(http.HandlerFunc(h.listPublicationIDs)))
-	mux.Handle("POST /api/v1/storage/{project_id}/publications", middleware(http.HandlerFunc(h.createPublication)))
-	mux.Handle("GET /api/v1/storage/{project_id}/publications/{id}", middleware(http.HandlerFunc(h.getPublication)))
-	mux.Handle("DELETE /api/v1/storage/{project_id}/publications/{id}", middleware(http.HandlerFunc(h.deletePublication)))
+	mux.Handle("GET /api/v1/projects/{project_id}/publications", middleware(http.HandlerFunc(h.listPublicationIDs)))
+	mux.Handle("POST /api/v1/projects/{project_id}/publications", middleware(http.HandlerFunc(h.createPublication)))
+	mux.Handle("GET /api/v1/projects/{project_id}/publications/{id}", middleware(http.HandlerFunc(h.getPublication)))
+	mux.Handle("DELETE /api/v1/projects/{project_id}/publications/{id}", middleware(http.HandlerFunc(h.deletePublication)))
 }
 
 // ListPublicationIDs возвращает ID публикаций проекта.
@@ -36,7 +36,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux, middleware func(http.Handle
 // @Failure 403 {object} ErrorResponse "Нет доступа к проекту"
 // @Failure 404 {object} ErrorResponse "Проект не найден"
 // @Failure 500 {object} ErrorResponse "Внутренняя ошибка сервера"
-// @Router /api/v1/storage/{project_id}/publications [get]
+// @Router /api/v1/projects/{project_id}/publications [get]
 func (h *Handler) listPublicationIDs(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 
@@ -67,7 +67,7 @@ func (h *Handler) listPublicationIDs(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {object} ErrorResponse "Нет доступа к проекту"
 // @Failure 404 {object} ErrorResponse "Черновик не найден"
 // @Failure 500 {object} ErrorResponse "Внутренняя ошибка сервера"
-// @Router /api/v1/storage/{project_id}/publications [post]
+// @Router /api/v1/projects/{project_id}/publications [post]
 func (h *Handler) createPublication(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 
@@ -99,7 +99,7 @@ func (h *Handler) createPublication(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {object} ErrorResponse "Нет доступа к проекту"
 // @Failure 404 {object} ErrorResponse "Публикация или проект не найдены"
 // @Failure 500 {object} ErrorResponse "Внутренняя ошибка сервера"
-// @Router /api/v1/storage/{project_id}/publications/{id} [get]
+// @Router /api/v1/projects/{project_id}/publications/{id} [get]
 func (h *Handler) getPublication(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 	id := r.PathValue("id")
@@ -131,7 +131,7 @@ func (h *Handler) getPublication(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {object} ErrorResponse "Нет доступа к проекту"
 // @Failure 404 {object} ErrorResponse "Публикация или проект не найдены"
 // @Failure 500 {object} ErrorResponse "Внутренняя ошибка сервера"
-// @Router /api/v1/storage/{project_id}/publications/{id} [delete]
+// @Router /api/v1/projects/{project_id}/publications/{id} [delete]
 func (h *Handler) deletePublication(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("project_id")
 	id := r.PathValue("id")
