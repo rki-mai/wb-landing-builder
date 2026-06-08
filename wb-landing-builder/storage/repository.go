@@ -255,7 +255,7 @@ func (r *draftRepository) CreateProject(ctx context.Context, projectID string, o
 
 func (r *draftRepository) GetProject(ctx context.Context, projectID string) (bson.M, error) {
 	filter := bson.M{
-		"_id": projectID,
+		"project_id": projectID,
 	}
 	var project bson.M
 	err := r.projectsCollection.FindOne(ctx, filter).Decode(&project)
