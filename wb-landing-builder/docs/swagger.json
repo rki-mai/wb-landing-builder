@@ -875,7 +875,24 @@
             }
         },
         "storage.Mutation": {
-            "type": "object"
+            "description": "Объект мутации, применяемый к черновику.",
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Data полезные данные мутации. Структура зависит от типа операции.\nДля 'create' может содержать тип элемента и его свойства.\nДля 'update' содержит ID элемента и новые значения.\nДля 'delete' содержит ID элемента.",
+                    "type": "object",
+                    "x-example": "{\"id\":\"header-1\",\"content\":\"Hello World\"}"
+                },
+                "operation": {
+                    "description": "Operation тип операции: create, update или delete.\nRequired: true\nEnum: [create, update, delete]",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/storage.OperationType"
+                        }
+                    ],
+                    "example": "create"
+                }
+            }
         },
         "storage.OperationType": {
             "type": "string",
