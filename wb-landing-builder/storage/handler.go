@@ -175,6 +175,7 @@ func (h *DraftHandler) handleLimit(w http.ResponseWriter, projectID string) bool
 // @Produce json
 // @Success 201 {object} map[string]string "ID созданного проекта"
 // @Failure 401 {object} ErrorResponse "Пользователь не авторизован"
+// @Failure 409 {object} ErrorResponse "Проект уже существует"
 // @Failure 500 {object} ErrorResponse "Ошибка создания проекта"
 // @Router /api/v1/projects [post]
 func (h *DraftHandler) createProject(w http.ResponseWriter, r *http.Request) {
@@ -188,7 +189,11 @@ func (h *DraftHandler) createProject(w http.ResponseWriter, r *http.Request) {
 	projectID := uuid.NewString()
 	err := h.service.CreateProject(r.Context(), projectID, userID)
 	if err != nil {
-		httputil.WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		if errors.Is(err, ErrProjectAlreadyExists) {
+			httputil.WriteJSONError(w, http.StatusConflict, err.Error())
+			return
+		}
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to create project: "+err.Error())
 		return
 	}
 
@@ -206,6 +211,9 @@ func (h *DraftHandler) createProject(w http.ResponseWriter, r *http.Request) {
 // @Param mutation body Mutation true "Объект мутации"
 // @Success 200 {object} ErrorResponse "Успешное применение, возвращает версию"
 // @Failure 400 {object} ErrorResponse "Ошибка валидации или неверный запрос"
+// @Failure 401 {object} ErrorResponse "Пользователь не авторизован"
+// @Failure 403 {object} ErrorResponse "Доступ запрещен"
+// @Failure 404 {object} ErrorResponse "Мутация или проект не найдены"
 // @Failure 413 {object} ErrorResponse "Превышен размер payload"
 // @Failure 429 {object} ErrorResponse "Превышен лимит запросов"
 // @Failure 500 {object} ErrorResponse "Внутренняя ошибка сервера"
@@ -269,6 +277,10 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
 			return
 		}
+		if errors.Is(err, ErrProjectNotFound) {
+			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
+			return
+		}
 		if errors.Is(err, ErrForbidden) {
 			httputil.WriteJSONError(w, http.StatusForbidden, err.Error())
 			return
@@ -294,6 +306,9 @@ func (h *DraftHandler) applyMutation(w http.ResponseWriter, r *http.Request) {
 // @Param project_id path string true "ID проекта"
 // @Success 200 {object} Mutation "JSON контент страницы"
 // @Failure 400 {object} ErrorResponse "Отсутствует project_id"
+// @Failure 401 {object} ErrorResponse "Пользователь не авторизован"
+// @Failure 403 {object} ErrorResponse "Доступ запрещен"
+// @Failure 404 {object} ErrorResponse "Проект не найден"
 // @Failure 500 {object} ErrorResponse "Ошибка получения данных"
 // @Router /api/v1/projects/{project_id}/draft [get]
 func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
@@ -337,6 +352,9 @@ func (h *DraftHandler) sendLatestPage(w http.ResponseWriter, r *http.Request) {
 // @Param version path int true "Номер версии"
 // @Success 200 {object} string "JSON контент страницы"
 // @Failure 400 {object} ErrorResponse "Неверный ID или версия"
+// @Failure 401 {object} ErrorResponse "Пользователь не авторизован"
+// @Failure 403 {object} ErrorResponse "Доступ запрещен"
+// @Failure 404 {object} ErrorResponse "Проект не найден"
 // @Failure 500 {object} ErrorResponse "Ошибка получения данных"
 // @Router /api/v1/projects/{project_id}/draft/versions/{version} [get]
 func (h *DraftHandler) sendPage(w http.ResponseWriter, r *http.Request) {
