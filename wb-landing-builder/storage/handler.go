@@ -133,19 +133,19 @@ func (h *DraftHandler) RegisterRoutes(
 	middleware func(http.Handler) http.Handler,
 ) {
 	mux.Handle(
-		"POST /api/v1/storage/projects",
+		"POST /api/v1/projects",
 		middleware(http.HandlerFunc(h.createProject)),
 	)
 	mux.Handle(
-		"POST /api/v1/storage/{project_id}/mutations",
+		"POST /api/v1/projects/{project_id}/draft/mutations",
 		middleware(http.HandlerFunc(h.applyMutation)),
 	)
 	mux.Handle(
-		"GET /api/v1/storage/{project_id}",
+		"GET /api/v1/projects/{project_id}/draft",
 		middleware(http.HandlerFunc(h.sendLatestPage)),
 	)
 	mux.Handle(
-		"GET /api/v1/storage/{project_id}/versions/{version}",
+		"GET /api/v1/projects/{project_id}/draft/versions/{version}",
 		middleware(http.HandlerFunc(h.sendPage)),
 	)
 }
