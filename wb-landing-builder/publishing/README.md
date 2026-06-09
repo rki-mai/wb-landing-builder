@@ -48,6 +48,21 @@ publishing/
 
 Документация в Swagger: http://localhost:8080/swagger/index.html (тег **Publications**).
 
+### Публичный просмотр (CDN)
+
+После публикации (`status: FINISHED`) отрендеренный лендинг доступен по публичной ссылке **без JWT**:
+
+| Метод | Путь | Описание |
+|-------|------|----------|
+| `GET` | `/publications/{publication_id}/index.html` | HTML-страница лендинга (через nginx CDN) |
+| `GET` | `/publications/{publication_id}/{path...}` | Любой файл из bundle (когда появятся CSS/JS/медиа) |
+
+Пример: `http://localhost:8080/publications/550e8400-e29b-41d4-a716-446655440000/index.html`
+
+Поток доставки: **MinIO (S3)** → **nginx CDN** (`proxy_cache`) → браузер. API-ручки `GET/POST …/publications` возвращают поле `public_url` с готовой ссылкой.
+
+Единая точка входа на `:8080` — сервис `cdn` в `docker-compose.yml`: `/api/*` и `/swagger/*` проксируются в backend, `/publications/*` отдаётся из MinIO с кэшированием. Bucket `publications` настроен на anonymous download (только GET объектов).
+
 ## Быстрый старт
 
 ### Makefile (рекомендуется)
@@ -282,6 +297,7 @@ make up
 | `PUBLISHING_CLI_PATH` | Путь к `generate.py` | `/app/cli/generate.py` |
 | `RABBITMQ_URL` | URL брокера | `amqp://guest:guest@rabbitmq:5672/` |
 | `RABBITMQ_PUBLISH_QUEUE` | Очередь задач на рендер | `publish.requests` |
+| `PUBLIC_BASE_URL` | Базовый URL для `public_url` в ответах API | `http://localhost:8080` |
 
 ## Тестирование
 
@@ -306,7 +322,7 @@ make up
 make test-smoke
 ```
 
-Скрипт `scripts/smoke.sh` прогоняет полный сценарий без Swagger: регистрация → login → 6 mutations → GET draft → POST publication → list/get → проверка 403 для чужого пользователя → DELETE.
+Скрипт `scripts/smoke.sh` прогоняет полный сценарий без Swagger: регистрация → login → 6 mutations → GET draft → POST publication → ожидание FINISHED → GET HTML через CDN → list/get → проверка 403 для чужого пользователя → DELETE.
 
 Фикстуры мутаций: `scripts/fixtures/mutations/` (тот же набор, что в разделе «Черновик в Storage» ниже).
 

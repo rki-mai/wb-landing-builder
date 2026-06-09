@@ -22,6 +22,7 @@ type Publication struct {
 	ProjectID    string            `json:"project_id" bson:"project_id"`
 	Version      int               `json:"version" bson:"version"`
 	AssetsPath   string            `json:"assets_path,omitempty" bson:"assets_path,omitempty"`
+	PublicURL    string            `json:"public_url,omitempty" bson:"-"`
 	Status       PublicationStatus `json:"status" bson:"status"`
 	ErrorMessage string            `json:"error_message,omitempty" bson:"error_message,omitempty"`
 	CreatedAt    time.Time         `json:"created_at" bson:"created_at"`

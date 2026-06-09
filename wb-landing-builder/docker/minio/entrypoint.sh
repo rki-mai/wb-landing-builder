@@ -10,6 +10,7 @@ main() {
   start_minio "$@"
   wait_for_minio
   initialize_minio
+  ensure_public_read_policy
   wait_minio
 }
 

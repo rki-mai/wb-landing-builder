@@ -11,11 +11,12 @@ import (
 
 // PublicationService управляет созданием публикаций: постановка задачи и обработка worker'ом.
 type PublicationService struct {
-	repo      PublicationRepository
-	blob      utils.BlobStorage
-	render    utils.Renderer
-	drafts    utils.DraftReader
-	publisher utils.Publisher
+	repo        PublicationRepository
+	blob        utils.BlobStorage
+	render      utils.Renderer
+	drafts      utils.DraftReader
+	publisher   utils.Publisher
+	cachePurger utils.CachePurger
 }
 
 // NewPublicationService создаёт сервис публикаций с заданными зависимостями.
@@ -25,13 +26,15 @@ func NewPublicationService(
 	render utils.Renderer,
 	drafts utils.DraftReader,
 	publisher utils.Publisher,
+	cachePurger utils.CachePurger,
 ) *PublicationService {
 	return &PublicationService{
-		repo:      repo,
-		blob:      blob,
-		render:    render,
-		drafts:    drafts,
-		publisher: publisher,
+		repo:        repo,
+		blob:        blob,
+		render:      render,
+		drafts:      drafts,
+		publisher:   publisher,
+		cachePurger: cachePurger,
 	}
 }
 
@@ -188,6 +191,12 @@ func (s *PublicationService) Delete(ctx context.Context, projectID, userID, id s
 		bundleKey := "publications/" + id
 		if err := s.blob.DeleteBundle(ctx, bundleKey); err != nil {
 			return fmt.Errorf("failed to delete bundle: %w", err)
+		}
+	}
+
+	if s.cachePurger != nil {
+		if err := s.cachePurger.PurgePublication(ctx, id); err != nil {
+			return fmt.Errorf("failed to purge cdn cache: %w", err)
 		}
 	}
 

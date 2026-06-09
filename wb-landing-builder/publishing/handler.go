@@ -2,18 +2,28 @@ package publishing
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/rki-mai/wb-landing-builder/httputil"
 )
 
 // Handler обрабатывает HTTP-запросы, связанные с публикациями.
 type Handler struct {
-	service *PublicationService
+	service       *PublicationService
+	publicBaseURL string
 }
 
 // NewPublicationHandler создаёт обработчик публикаций.
-func NewPublicationHandler(service *PublicationService) *Handler {
-	return &Handler{service: service}
+func NewPublicationHandler(service *PublicationService, publicBaseURL string) *Handler {
+	return &Handler{service: service, publicBaseURL: publicBaseURL}
+}
+
+func (h *Handler) fillPublicURL(pub *Publication) {
+	if pub == nil || h.publicBaseURL == "" {
+		return
+	}
+	base := strings.TrimSuffix(h.publicBaseURL, "/")
+	pub.PublicURL = base + "/publications/" + pub.ID + "/index.html"
 }
 
 // RegisterRoutes регистрирует маршруты публикаций (за middleware авторизации).
@@ -83,6 +93,7 @@ func (h *Handler) createPublication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.fillPublicURL(pub)
 	httputil.WriteJSONResponse(w, http.StatusCreated, pub)
 }
 
@@ -116,6 +127,7 @@ func (h *Handler) getPublication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.fillPublicURL(pub)
 	httputil.WriteJSONResponse(w, http.StatusOK, pub)
 }
 

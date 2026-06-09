@@ -5,8 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+)
+
+const (
+	defaultRabbitMQConnectAttempts = 30
+	defaultRabbitMQConnectDelay    = 2 * time.Second
 )
 
 // RabbitMQConfig — параметры подключения к RabbitMQ.
@@ -21,11 +27,42 @@ type rabbitMQ struct {
 	queue   string
 }
 
+func dialRabbitMQ(url string) (*amqp.Connection, error) {
+	var lastErr error
+
+	for attempt := 1; attempt <= defaultRabbitMQConnectAttempts; attempt++ {
+		conn, err := amqp.Dial(url)
+		if err == nil {
+			if attempt > 1 {
+				log.Printf("Connected to RabbitMQ on attempt %d/%d", attempt, defaultRabbitMQConnectAttempts)
+			}
+			return conn, nil
+		}
+
+		lastErr = err
+		if attempt < defaultRabbitMQConnectAttempts {
+			log.Printf(
+				"RabbitMQ not ready (attempt %d/%d): %v",
+				attempt,
+				defaultRabbitMQConnectAttempts,
+				err,
+			)
+			time.Sleep(defaultRabbitMQConnectDelay)
+		}
+	}
+
+	return nil, fmt.Errorf(
+		"failed to connect to rabbitmq after %d attempts: %w",
+		defaultRabbitMQConnectAttempts,
+		lastErr,
+	)
+}
+
 // NewRabbitMQ подключается к RabbitMQ и объявляет durable-очередь.
 func NewRabbitMQ(cfg RabbitMQConfig) (Queue, error) {
-	conn, err := amqp.Dial(cfg.URL)
+	conn, err := dialRabbitMQ(cfg.URL)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to rabbitmq: %w", err)
+		return nil, err
 	}
 
 	channel, err := conn.Channel()

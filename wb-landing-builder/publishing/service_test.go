@@ -110,6 +110,19 @@ type mockPublisher struct {
 	err   error
 }
 
+type mockCachePurger struct {
+	purged []string
+	err    error
+}
+
+func (m *mockCachePurger) PurgePublication(_ context.Context, publicationID string) error {
+	if m.err != nil {
+		return m.err
+	}
+	m.purged = append(m.purged, publicationID)
+	return nil
+}
+
 func (m *mockPublisher) Publish(_ context.Context, task utils.PublishTask) error {
 	if m.err != nil {
 		return m.err
@@ -139,7 +152,7 @@ func TestPublicationServiceCreateReturnsPendingWithoutRendering(t *testing.T) {
 	drafts := &mockDraftReader{draft: testDraft(t)}
 	publisher := &mockPublisher{}
 
-	service := NewPublicationService(repo, blob, renderer, drafts, publisher)
+	service := NewPublicationService(repo, blob, renderer, drafts, publisher, nil)
 
 	pub, err := service.Create(context.Background(), "project-1", "user-1")
 	if err != nil {
@@ -169,7 +182,7 @@ func TestPublicationServiceProcessPublicationFinishesPublication(t *testing.T) {
 	drafts := &mockDraftReader{draft: testDraft(t)}
 	publisher := &mockPublisher{}
 
-	service := NewPublicationService(repo, blob, renderer, drafts, publisher)
+	service := NewPublicationService(repo, blob, renderer, drafts, publisher, nil)
 
 	pub, err := service.Create(context.Background(), "project-1", "user-1")
 	if err != nil {
@@ -207,7 +220,7 @@ func TestPublicationServiceCreateMarksFailedWhenPublishFails(t *testing.T) {
 	drafts := &mockDraftReader{draft: testDraft(t)}
 	publisher := &mockPublisher{err: errors.New("queue unavailable")}
 
-	service := NewPublicationService(repo, blob, renderer, drafts, publisher)
+	service := NewPublicationService(repo, blob, renderer, drafts, publisher, nil)
 
 	_, err := service.Create(context.Background(), "project-1", "user-1")
 	if err == nil {
@@ -231,7 +244,7 @@ func TestPublicationServiceDeleteRemovesMongoBeforeBlob(t *testing.T) {
 	drafts := &mockDraftReader{draft: testDraft(t)}
 	publisher := &mockPublisher{}
 
-	service := NewPublicationService(repo, blob, renderer, drafts, publisher)
+	service := NewPublicationService(repo, blob, renderer, drafts, publisher, nil)
 
 	pub := Publication{
 		ID:         "pub-1",
@@ -256,5 +269,35 @@ func TestPublicationServiceDeleteRemovesMongoBeforeBlob(t *testing.T) {
 	}
 	if _, ok := blob.bundles["publications/pub-1"]; ok {
 		t.Fatal("bundle should be removed from blob storage")
+	}
+}
+
+func TestPublicationServiceDeletePurgesCDNCache(t *testing.T) {
+	repo := newMockPublicationRepo()
+	blob := newMockBlobStorage()
+	renderer := &mockRenderer{}
+	drafts := &mockDraftReader{draft: testDraft(t)}
+	publisher := &mockPublisher{}
+	cachePurger := &mockCachePurger{}
+
+	service := NewPublicationService(repo, blob, renderer, drafts, publisher, cachePurger)
+
+	pub := Publication{
+		ID:         "pub-1",
+		ProjectID:  "project-1",
+		Status:     StatusFinished,
+		AssetsPath: "s3://publications/publications/pub-1/",
+		CreatedAt:  time.Now().UTC(),
+	}
+	if err := repo.Insert(context.Background(), pub); err != nil {
+		t.Fatalf("Insert() error = %v", err)
+	}
+
+	if err := service.Delete(context.Background(), "project-1", "user-1", "pub-1"); err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	if len(cachePurger.purged) != 1 || cachePurger.purged[0] != "pub-1" {
+		t.Fatalf("PurgePublication() calls = %v, want [pub-1]", cachePurger.purged)
 	}
 }
