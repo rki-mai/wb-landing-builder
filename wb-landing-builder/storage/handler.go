@@ -195,7 +195,7 @@ func (h *DraftHandler) getUserProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSONResponse(w, http.StatusOK, map[string]interface{}{
-		"project_ids": projectIDs,
+		"projects": projectIDs,
 	})
 }
 
