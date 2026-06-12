@@ -36,6 +36,7 @@ import (
 	"github.com/rki-mai/wb-landing-builder/publishing"
 	pubutils "github.com/rki-mai/wb-landing-builder/publishing/utils"
 	pubworker "github.com/rki-mai/wb-landing-builder/publishing/worker"
+	staticfiles "github.com/rki-mai/wb-landing-builder/static"
 	"github.com/rki-mai/wb-landing-builder/storage"
 
 	_ "github.com/rki-mai/wb-landing-builder/docs"
@@ -117,6 +118,8 @@ func main() {
 	mux.Handle("/swagger/", httpSwagger.Handler(
 		httpSwagger.URL("/swagger/doc.json"),
 	))
+
+	staticfiles.TryRegister(mux, cfg.StaticFilesDir)
 
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,

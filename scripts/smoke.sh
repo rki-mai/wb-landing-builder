@@ -97,7 +97,11 @@ cleanup_test_data() {
 
   local user_ids_json publication_ids_json storage_touched_js result
   user_ids_json="$(printf '%s\n' "${CREATED_USER_IDS[@]}" | jq -R . | jq -s -c .)"
-  publication_ids_json="$(printf '%s\n' "${CREATED_PUBLICATION_IDS[@]}" | jq -R . | jq -s -c .)"
+  if ((${#CREATED_PUBLICATION_IDS[@]} > 0)); then
+    publication_ids_json="$(printf '%s\n' "${CREATED_PUBLICATION_IDS[@]}" | jq -R . | jq -s -c .)"
+  else
+    publication_ids_json='[]'
+  fi
   storage_touched_js=$([[ "$STORAGE_TOUCHED" == "1" ]] && echo true || echo false)
 
   result="$(
@@ -264,6 +268,21 @@ main() {
 
   wait_for_api
 
+  log "Fetch static UI file"
+  local static_code static_body missing_code
+  static_body="$(
+    curl -sS "${BASE_URL}/index.html" -w $'\n__HTTP_CODE__:%{http_code}'
+  )"
+  static_code="${static_body##*$'\n'__HTTP_CODE__:}"
+  static_body="${static_body%%$'\n'__HTTP_CODE__:*}"
+  [[ "$static_code" == "200" ]] || fail "Static GET /index.html expected HTTP 200, got ${static_code}"
+  [[ -n "$static_body" ]] || fail "Empty body from static /index.html"
+  missing_code="$(
+    curl -sS -o /dev/null -w '%{http_code}' "${BASE_URL}/__smoke-missing-static-file__.png"
+  )"
+  [[ "$missing_code" == "404" ]] || fail "Static GET missing file expected HTTP 404, got ${missing_code}"
+  log_ok "static /index.html returned HTTP 200, missing file returned HTTP 404"
+
   log "Register user ${EMAIL}"
   register_user "$EMAIL" >/dev/null
   log_ok "registered"
@@ -276,12 +295,17 @@ main() {
   [[ -n "$token" && "$token" != "null" ]] || fail "Empty access_token"
   log_ok "access_token received"
 
+  log "Create project"
+  PROJECT_ID="$(json_post '/api/v1/projects' '{}' 201 "$token" | jq -r '.project_id')"
+  [[ -n "$PROJECT_ID" && "$PROJECT_ID" != "null" ]] || fail "Empty project_id"
+  log_ok "project_id=${PROJECT_ID}"
+
   log "Apply sample draft mutations to project ${PROJECT_ID}"
   local mutation_file payload version
   version=0
   for mutation_file in "${FIXTURES_DIR}"/*.json; do
     payload="$(cat "$mutation_file")"
-    version="$(json_post "/api/v1/storage/${PROJECT_ID}/mutations" \
+    version="$(json_post "/api/v1/projects/${PROJECT_ID}/draft/mutations" \
       "$payload" 200 "$token" | jq -r '.version')"
   done
   STORAGE_TOUCHED=1
@@ -289,7 +313,7 @@ main() {
 
   log "Read draft snapshot"
   local draft elements_count
-  draft="$(json_get "/api/v1/storage/${PROJECT_ID}" 200 "$token")"
+  draft="$(json_get "/api/v1/projects/${PROJECT_ID}/draft" 200 "$token")"
   elements_count="$(echo "$draft" | jq '.elements | length')"
   [[ "$elements_count" -eq 6 ]] || fail "Expected 6 elements, got ${elements_count}"
   log_ok "$(echo "$draft" | jq -r '[.version, (.elements | length), ([.elements[].id] | join(", "))] | "version=\(.[0]), elements=\(.[1]), ids=\(.[2])"')"
@@ -297,7 +321,7 @@ main() {
 
   log "Create publication"
   local publication publication_id publication_status
-  publication="$(json_post "/api/v1/storage/${PROJECT_ID}/publications" '{}' 201 "$token")"
+  publication="$(json_post "/api/v1/projects/${PROJECT_ID}/publications" '{}' 201 "$token")"
   publication_id="$(echo "$publication" | jq -r '.id')"
   publication_status="$(echo "$publication" | jq -r '.status')"
   [[ -n "$publication_id" && "$publication_id" != "null" ]] || fail "Empty publication id"
@@ -311,7 +335,7 @@ main() {
   pub_meta=""
   status=""
   for attempt in $(seq 1 30); do
-    pub_meta="$(json_get "/api/v1/storage/${PROJECT_ID}/publications/${publication_id}" 200 "$token")"
+    pub_meta="$(json_get "/api/v1/projects/${PROJECT_ID}/publications/${publication_id}" 200 "$token")"
     status="$(echo "$pub_meta" | jq -r '.status')"
     if [[ "$status" == "FINISHED" ]]; then
       assets_path="$(echo "$pub_meta" | jq -r '.assets_path')"
@@ -351,13 +375,13 @@ main() {
 
   log "List publication IDs"
   local ids
-  ids="$(json_get "/api/v1/storage/${PROJECT_ID}/publications" 200 "$token")"
+  ids="$(json_get "/api/v1/projects/${PROJECT_ID}/publications" 200 "$token")"
   echo "$ids" | jq -e --arg id "$publication_id" '.ids | index($id) != null' >/dev/null \
     || fail "Created publication not found in list"
   log_ok "$(echo "$ids" | jq -r '.ids | "ids=[\(join(", "))]"')"
 
   log "Get publication metadata"
-  pub_meta="$(json_get "/api/v1/storage/${PROJECT_ID}/publications/${publication_id}" 200 "$token")"
+  pub_meta="$(json_get "/api/v1/projects/${PROJECT_ID}/publications/${publication_id}" 200 "$token")"
   log_ok "$(echo "$pub_meta" | jq -r '"project_id=\(.project_id), status=\(.status), version=\(.version)"')"
 
   log "Check project access control (foreign user gets 403)"
@@ -367,11 +391,11 @@ main() {
   other_token="$(json_post '/api/v1/auth/login' \
     "{\"email\":\"${other_email}\",\"password\":\"${PASSWORD}\"}" \
     200 | jq -r '.access_token')"
-  json_get "/api/v1/storage/${PROJECT_ID}/publications" 403 "$other_token" >/dev/null
+  json_get "/api/v1/projects/${PROJECT_ID}/publications" 403 "$other_token" >/dev/null
   log_ok "foreign user denied (HTTP 403)"
 
   log "Delete publication"
-  json_delete "/api/v1/storage/${PROJECT_ID}/publications/${publication_id}" 204 "$token"
+  json_delete "/api/v1/projects/${PROJECT_ID}/publications/${publication_id}" 204 "$token"
   log_ok "deleted ${publication_id}"
 
   log "Verify deleted publication is unavailable via CDN"
@@ -382,7 +406,7 @@ main() {
   log_ok "CDN returned HTTP 404 for deleted publication"
 
   log "Verify publication list is empty"
-  ids="$(json_get "/api/v1/storage/${PROJECT_ID}/publications" 200 "$token")"
+  ids="$(json_get "/api/v1/projects/${PROJECT_ID}/publications" 200 "$token")"
   local list_len
   list_len="$(echo "$ids" | jq '.ids | length')"
   [[ "$list_len" -eq 0 ]] || fail "Expected empty publication list, got ${list_len}"
