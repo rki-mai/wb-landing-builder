@@ -31,7 +31,7 @@ func NewHandler(dir string) (*Handler, error) {
 	return &Handler{root: abs}, nil
 }
 
-// ServeHTTP отдаёт файл по пути запроса или возвращает 404.
+// ServeHTTP отдаёт файл или HTML-листинг директории.
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		http.NotFound(w, r)
@@ -44,20 +44,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rel := strings.TrimPrefix(r.URL.Path, "/")
-	if rel == "" {
-		http.NotFound(w, r)
-		return
+	full := h.root
+	if rel != "" {
+		full = filepath.Join(h.root, rel)
 	}
 
-	full := filepath.Join(h.root, rel)
 	if !isUnderRoot(h.root, full) {
 		http.NotFound(w, r)
 		return
 	}
 
 	info, err := os.Stat(full)
-	if err != nil || info.IsDir() {
+	if err != nil {
 		http.NotFound(w, r)
+		return
+	}
+
+	if info.IsDir() {
+		if err := writeDirectoryListing(w, r, r.URL.Path, os.DirFS(full)); err != nil {
+			http.Error(w, "failed to read directory", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -88,6 +94,8 @@ func TryRegister(mux *http.ServeMux, dir string) {
 		return
 	}
 
+	mux.Handle("GET /", handler)
+	mux.Handle("HEAD /", handler)
 	mux.Handle("GET /{path...}", handler)
 	mux.Handle("HEAD /{path...}", handler)
 	log.Printf("Static files: serving from %s", handler.root)

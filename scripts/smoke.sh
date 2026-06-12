@@ -283,6 +283,19 @@ main() {
   [[ "$missing_code" == "404" ]] || fail "Static GET missing file expected HTTP 404, got ${missing_code}"
   log_ok "static /index.html returned HTTP 200, missing file returned HTTP 404"
 
+  log "List static directory"
+  local listing_code listing_body
+  listing_body="$(
+    curl -sS "${BASE_URL}/assets/" -w $'\n__HTTP_CODE__:%{http_code}'
+  )"
+  listing_code="${listing_body##*$'\n'__HTTP_CODE__:}"
+  listing_body="${listing_body%%$'\n'__HTTP_CODE__:*}"
+  [[ "$listing_code" == "200" ]] || fail "Static GET /assets/ expected HTTP 200, got ${listing_code}"
+  [[ "$listing_body" == *"Index of /assets/"* ]] || fail "Expected directory listing for /assets/"
+  [[ "$listing_body" == *"app.js"* ]] || fail "Expected file entry in /assets/ directory listing"
+  [[ "$listing_body" == *"../"* ]] || fail "Expected parent link in /assets/ directory listing"
+  log_ok "directory listing returned HTTP 200 (nginx autoindex)"
+
   log "Register user ${EMAIL}"
   register_user "$EMAIL" >/dev/null
   log_ok "registered"
