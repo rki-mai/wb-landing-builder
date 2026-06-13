@@ -61,7 +61,24 @@ publishing/
 
 Поток доставки: **MinIO (S3)** → **nginx CDN** (`proxy_cache`) → браузер. API-ручки `GET/POST …/publications` возвращают поле `public_url` с готовой ссылкой.
 
-Единая точка входа на `:8080` — сервис `cdn` в `docker-compose.yml`: `/api/*` и `/swagger/*` проксируются в backend, `/publications/*` отдаётся из MinIO с кэшированием. Bucket `publications` настроен на anonymous download (только GET объектов).
+Единая точка входа на `:8080` — сервис `cdn` в `docker-compose.yml`:
+
+| Путь | Назначение |
+|------|------------|
+| `/api/*` | backend API |
+| `/swagger/*` | Swagger UI |
+| `/publications/*` | MinIO (опубликованные лендинги, с кэшем) |
+| `/*` | статические файлы UI из `docker/static/` (nginx `autoindex`) |
+
+Bucket `publications` настроен на anonymous download (только GET объектов).
+
+### Статические файлы UI
+
+Для локальной разработки фронтенда в `docker/static/` лежит placeholder `index.html`. Собранный фронтенд можно смонтировать в CDN-контейнер (`./docker/static` → `/usr/share/nginx/static`) вместо этой директории.
+
+Запрос к существующей директории (например `/assets/`) возвращает листинг nginx (`autoindex`): директории отображаются со слэшем на конце, файлы — без. Несуществующий путь — `404`.
+
+При запуске backend напрямую (`go run main.go`, без nginx) отдача статики включается через переменную `STATIC_FILES_DIR`. Если директория задана, handler также отдаёт HTML-листинг для директорий. Если директория не задана или отсутствует, handler не регистрируется.
 
 ## Быстрый старт
 

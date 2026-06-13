@@ -25,8 +25,9 @@ type Config struct {
 	S3           S3Config
 	Publishing   PublishingConfig
 	RabbitMQ     RabbitMQConfig
-	CDN          CDNConfig
+	CDN           CDNConfig
 	PublicBaseURL string
+	StaticFilesDir string
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	RateLimit    int
@@ -120,7 +121,8 @@ func Load() *Config {
 		CDN: CDNConfig{
 			CachePath: getEnv("CDN_CACHE_PATH", "/var/cache/nginx/publications"),
 		},
-		PublicBaseURL: getEnv("PUBLIC_BASE_URL", "http://localhost:8080"),
+		PublicBaseURL:  getEnv("PUBLIC_BASE_URL", "http://localhost:8080"),
+		StaticFilesDir: getEnv("STATIC_FILES_DIR", ""),
 	}
 }
 

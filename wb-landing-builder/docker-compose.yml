@@ -138,6 +138,7 @@ services:
       - "8080:80"
     volumes:
       - ./docker/cdn/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/static:/usr/share/nginx/static:ro
       - cdn-cache:/var/cache/nginx/publications
     depends_on:
       wb-landing-builder:
