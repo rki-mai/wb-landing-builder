@@ -54,3 +54,11 @@ type ErrorResponse struct {
 	// Error описание произошедшей ошибки.
 	Error string `json:"error" example:"описание ошибки..."`
 }
+
+type CreateProjectRequest struct {
+	Name string `json:"name"`
+}
+
+type UpdateProjectNameRequest struct {
+	Name string `json:"name"`
+}

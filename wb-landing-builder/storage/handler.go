@@ -141,6 +141,10 @@ func (h *DraftHandler) RegisterRoutes(
 		middleware(http.HandlerFunc(h.createProject)),
 	)
 	mux.Handle(
+		"PATCH /api/v1/projects/{project_id}",
+		middleware(http.HandlerFunc(h.updateProjectName)),
+	)
+	mux.Handle(
 		"POST /api/v1/projects/{project_id}/draft/mutations",
 		middleware(http.HandlerFunc(h.applyMutation)),
 	)
@@ -219,8 +223,20 @@ func (h *DraftHandler) createProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var req CreateProjectRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Name == "" {
+		httputil.WriteJSONError(w, http.StatusBadRequest, "project name is required")
+		return
+	}
+
 	projectID := uuid.NewString()
-	err := h.service.CreateProject(r.Context(), projectID, userID)
+	err := h.service.CreateProject(r.Context(), projectID, userID, req.Name)
 	if err != nil {
 		if errors.Is(err, ErrProjectAlreadyExists) {
 			httputil.WriteJSONError(w, http.StatusConflict, err.Error())
@@ -231,6 +247,64 @@ func (h *DraftHandler) createProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSONResponse(w, http.StatusCreated, map[string]string{"project_id": projectID})
+}
+
+// UpdateProjectName изменяет имя проекта.
+// @Summary Изменить имя проекта
+// @Description Обновляет человекочитаемое имя существующего проекта.
+// @Tags Storage
+// @Accept json
+// @Security BearerAuth
+// @Produce json
+// @Param project_id path string true "ID проекта"
+// @Param request body UpdateProjectNameRequest true "Новое имя проекта"
+// @Success 200 {object} map[string]string "Имя проекта успешно обновлено"
+// @Failure 400 {object} ErrorResponse "Ошибка валидации или неверный запрос"
+// @Failure 401 {object} ErrorResponse "Пользователь не авторизован"
+// @Failure 403 {object} ErrorResponse "Доступ запрещен"
+// @Failure 404 {object} ErrorResponse "Проект не найден"
+// @Failure 500 {object} ErrorResponse "Внутренняя ошибка сервера"
+// @Router /api/v1/projects/{project_id} [patch]
+func (h *DraftHandler) updateProjectName(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(auth.UserIDKey).(string)
+	if !ok {
+		httputil.WriteJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	projectID := r.PathValue("project_id")
+	if projectID == "" {
+		httputil.WriteJSONError(w, http.StatusBadRequest, "invalid URI: missing project_id")
+		return
+	}
+
+	var req UpdateProjectNameRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteJSONError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Name == "" {
+		httputil.WriteJSONError(w, http.StatusBadRequest, "project name is required")
+		return
+	}
+
+	err := h.service.UpdateProjectName(r.Context(), projectID, userID, req.Name)
+	if err != nil {
+		if errors.Is(err, ErrForbidden) {
+			httputil.WriteJSONError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		if errors.Is(err, ErrProjectNotFound) {
+			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to create project: "+err.Error())
+		return
+	}
+
+	httputil.WriteJSONResponse(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // ApplyMutation применяет мутацию к черновику страницы проекта.
