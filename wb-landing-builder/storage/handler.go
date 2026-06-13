@@ -188,7 +188,7 @@ func (h *DraftHandler) getUserProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	projectIDs, err := h.service.GetUserProjectIDs(r.Context(), userID)
+	projectIDs, err := h.service.GetUserProjects(r.Context(), userID)
 	if err != nil {
 		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to get projects: "+err.Error())
 		return
