@@ -246,6 +246,6 @@ func getMaxVersion(elements []bson.M) int {
 	return int(maxV)
 }
 
-func (s *DraftService) GetUserProjectIDs(ctx context.Context, userID string) ([]bson.M, error) {
+func (s *DraftService) GetUserProjectIDs(ctx context.Context, userID string) ([]map[string]any, error) {
 	return s.repo.GetUserProjectIDs(ctx, userID)
 }
