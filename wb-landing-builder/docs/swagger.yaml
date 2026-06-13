@@ -283,6 +283,35 @@ paths:
       tags:
       - Auth
   /api/v1/projects:
+    get:
+      consumes:
+      - application/json
+      description: Возвращает список ID проектов, в которых участвует текущий авторизованный
+        пользователь
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Список ID проектов пользователя
+          schema:
+            additionalProperties:
+              items:
+                type: string
+              type: array
+            type: object
+        "401":
+          description: Пользователь не авторизован
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "500":
+          description: Ошибка получения списка проектов
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Получить проекты пользователя
+      tags:
+      - Storage
     post:
       consumes:
       - application/json

@@ -2,6 +2,7 @@ services:
   mongo:
     build:
       context: ./docker/mongo
+      dockerfile: Dockerfile
     image: landing-mongo:local
     container_name: landing-mongo
     restart: always
@@ -42,6 +43,7 @@ services:
   minio:
     build:
       context: ./docker/minio
+      dockerfile: Dockerfile
     image: landing-minio:local
     container_name: landing-minio
     ports:

@@ -22,6 +22,7 @@ type DraftRepository interface {
 
 	CreateProject(ctx context.Context, projectID string, ownerID string) error
 	GetProject(ctx context.Context, projectID string) (bson.M, error)
+	GetUserProjects(ctx context.Context, userID string) ([]map[string]any, error)
 
 	Close(ctx context.Context) error
 }
@@ -266,4 +267,26 @@ func (r *draftRepository) GetProject(ctx context.Context, projectID string) (bso
 		return nil, fmt.Errorf("find project error: %w", err)
 	}
 	return project, nil
+}
+
+func (r *draftRepository) GetUserProjects(ctx context.Context, userID string) ([]map[string]any, error) {
+	pipeline := mongo.Pipeline{
+		{{Key: "$match", Value: bson.M{"owner_id": userID}}},
+		{{Key: "$project", Value: bson.M{
+			"_id":        0,
+			"id":         "$project_id",
+			"created_at": "$created_at",
+		}}},
+	}
+	cursor, err := r.projectsCollection.Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	var results []map[string]any
+	err = cursor.All(ctx, &results)
+	if err != nil {
+		return nil, err
+	}
+	return results, nil
 }

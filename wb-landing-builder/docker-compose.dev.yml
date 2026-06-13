@@ -1,9 +1,11 @@
 services:
   mongo:
-    image: mongo:7
+    build:
+      context: ./docker/mongo
+      dockerfile: Dockerfile
+    image: landing-mongo:local
     container_name: landing-mongo
     restart: always
-    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
       - "27017:27017"
     volumes:
@@ -11,53 +13,11 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.adminCommand({ ping: 1 }).ok' | grep 1"]
+      test: ["CMD", "/usr/local/bin/mongo-healthcheck.sh"]
       interval: 5s
       timeout: 30s
       retries: 20
-      start_period: 20s
-
-  mongo-init:
-    image: mongo:7
-    depends_on:
-      mongo:
-        condition: service_healthy
-    networks:
-      - app-network
-    restart: "no"
-    entrypoint: >
-      bash -c '
-        echo "Waiting for MongoDB to be ready..."
-        until mongosh --host mongo:27017 --quiet --eval "db.adminCommand({ ping: 1 }).ok" | grep 1; do
-          sleep 1
-        done
-        echo "MongoDB is ready. Initializing replica set..."
-        mongosh --host mongo:27017 --quiet --eval "
-          try {
-            const status = rs.status();
-            print(\"Replica set already initialized: \" + status.set);
-          } catch (e) {
-            print(\"Initializing replica set...\");
-            rs.initiate({ _id: \"rs0\", members: [{ _id: 0, host: \"mongo:27017\" }] });
-            print(\"Replica set initialized successfully\");
-          }
-        "
-        echo "Creating admin user..."
-        mongosh --host mongo:27017 --quiet --eval "
-          db = db.getSiblingDB(\"admin\");
-          if (!db.getUser(\"admin\")) {
-            db.createUser({
-              user: \"admin\",
-              pwd: \"admin\",
-              roles: [{ role: \"root\", db: \"admin\" }]
-            });
-            print(\"Admin user created successfully\");
-          } else {
-            print(\"Admin user already exists\");
-          }
-        "
-        echo "MongoDB initialization complete!"
-      '
+      start_period: 30s
 
   mongo-express:
     image: mongo-express:latest
@@ -69,18 +29,68 @@ services:
       ME_CONFIG_MONGODB_URL: mongodb://admin:admin@mongo:27017/?replicaSet=rs0&authSource=admin
       ME_CONFIG_BASICAUTH: false
     depends_on:
-      mongo-init:
-        condition: service_completed_successfully
+      mongo:
+        condition: service_healthy
     networks:
       - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1:8081/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  minio:
+    build:
+      context: ./docker/minio
+      dockerfile: Dockerfile
+    image: landing-minio:local
+    container_name: landing-minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_DEFAULT_BUCKET: publications
+    volumes:
+      - miniodata:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/minio-healthcheck.sh"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: landing-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   wb-landing-builder:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    container_name: wb-landing-builder
     command: ["sleep", "infinity"]
     working_dir: /app
+    image: wb-landing-builder:latest
+    container_name: landing-builder
     restart: on-failure
     ports:
       - "8080:8080"
@@ -99,9 +109,22 @@ services:
       - MONGO_DATABASE=storage
       - MONGO_MAX_CONNECTIONS=100
       - MONGO_TTL_DAYS=30
+      - S3_ENDPOINT=http://minio:9000
+      - S3_REGION=us-east-1
+      - S3_ACCESS_KEY=minioadmin
+      - S3_SECRET_KEY=minioadmin
+      - S3_BUCKET=publications
+      - S3_USE_PATH_STYLE=true
+      - PUBLISHING_CLI_PATH=/app/cli/generate.py
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - RABBITMQ_PUBLISH_QUEUE=publish.requests
     depends_on:
-      mongo-init:
-        condition: service_completed_successfully
+      mongo:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
     networks:
       - app-network
     volumes:
@@ -109,6 +132,8 @@ services:
 
 volumes:
   mongodata:
+    driver: local
+  miniodata:
     driver: local
 
 networks:

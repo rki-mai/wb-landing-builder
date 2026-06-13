@@ -245,3 +245,7 @@ func getMaxVersion(elements []bson.M) int {
 	}
 	return int(maxV)
 }
+
+func (s *DraftService) GetUserProjects(ctx context.Context, userID string) ([]map[string]any, error) {
+	return s.repo.GetUserProjects(ctx, userID)
+}

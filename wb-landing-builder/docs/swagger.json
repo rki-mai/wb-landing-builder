@@ -200,6 +200,50 @@
             }
         },
         "/api/v1/projects": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Возвращает список ID проектов, в которых участвует текущий авторизованный пользователь",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Storage"
+                ],
+                "summary": "Получить проекты пользователя",
+                "responses": {
+                    "200": {
+                        "description": "Список ID проектов пользователя",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Пользователь не авторизован",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Ошибка получения списка проектов",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {

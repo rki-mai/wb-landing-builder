@@ -133,6 +133,10 @@ func (h *DraftHandler) RegisterRoutes(
 	middleware func(http.Handler) http.Handler,
 ) {
 	mux.Handle(
+		"GET /api/v1/projects",
+		middleware(http.HandlerFunc(h.getUserProjects)),
+	)
+	mux.Handle(
 		"POST /api/v1/projects",
 		middleware(http.HandlerFunc(h.createProject)),
 	)
@@ -164,6 +168,35 @@ func (h *DraftHandler) handleLimit(w http.ResponseWriter, projectID string) bool
 		return false
 	}
 	return true
+}
+
+// GetUserProjects получает список проектов текущего пользователя.
+// @Summary Получить проекты пользователя
+// @Description Возвращает список ID проектов, в которых участвует текущий авторизованный пользователь
+// @Tags Storage
+// @Accept json
+// @Security BearerAuth
+// @Produce json
+// @Success 200 {object} map[string][]string "Список ID проектов пользователя"
+// @Failure 401 {object} ErrorResponse "Пользователь не авторизован"
+// @Failure 500 {object} ErrorResponse "Ошибка получения списка проектов"
+// @Router /api/v1/projects [get]
+func (h *DraftHandler) getUserProjects(w http.ResponseWriter, r *http.Request) {
+	userID, ok := r.Context().Value(auth.UserIDKey).(string)
+	if !ok {
+		httputil.WriteJSONError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	projectIDs, err := h.service.GetUserProjects(r.Context(), userID)
+	if err != nil {
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to get projects: "+err.Error())
+		return
+	}
+
+	httputil.WriteJSONResponse(w, http.StatusOK, map[string]interface{}{
+		"projects": projectIDs,
+	})
 }
 
 // CreateProject создает новый пустой проект.
