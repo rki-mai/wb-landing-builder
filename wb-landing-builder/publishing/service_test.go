@@ -85,9 +85,11 @@ type mockRenderer struct {
 	called bool
 }
 
-func (m *mockRenderer) Render(_ context.Context, _ []byte) ([]byte, error) {
+func (m *mockRenderer) Render(_ context.Context, _ []byte) ([]utils.Blob, error) {
 	m.called = true
-	return []byte("<html></html>"), nil
+	return []utils.Blob{
+		{Path: "index.html", Content: []byte("<html></html>"), ContentType: "text/html; charset=utf-8"},
+	}, nil
 }
 
 type mockDraftReader struct {
