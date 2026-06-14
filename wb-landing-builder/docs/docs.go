@@ -369,7 +369,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Применяет JSON-мутацию к указанному проекту после проверки схемы и лимитов.",
+                "description": "Применяет JSON-мутацию (create, update, delete или revert) к указанному проекту после проверки схемы и лимитов.",
                 "consumes": [
                     "application/json"
                 ],
@@ -874,6 +874,9 @@ const docTemplate = `{
                 "project_id": {
                     "type": "string"
                 },
+                "public_url": {
+                    "type": "string"
+                },
                 "status": {
                     "$ref": "#/definitions/publishing.PublicationStatus"
                 },
@@ -931,7 +934,7 @@ const docTemplate = `{
                     "x-example": "{\"id\":\"header-1\",\"content\":\"Hello World\"}"
                 },
                 "operation": {
-                    "description": "Operation тип операции: create, update или delete.\nRequired: true\nEnum: [create, update, delete]",
+                    "description": "Operation тип операции: create, update, delete или revert.\nRequired: true\nEnum: [create, update, delete, revert]",
                     "allOf": [
                         {
                             "$ref": "#/definitions/storage.OperationType"
@@ -946,12 +949,14 @@ const docTemplate = `{
             "enum": [
                 "create",
                 "update",
-                "delete"
+                "delete",
+                "revert"
             ],
             "x-enum-varnames": [
                 "OperationCreate",
                 "OperationUpdate",
-                "OperationDelete"
+                "OperationDelete",
+                "OperationRevert"
             ]
         }
     },

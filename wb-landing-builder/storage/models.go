@@ -15,6 +15,8 @@ const (
 	OperationUpdate OperationType = "update"
 	// OperationDelete удаляет элемент.
 	OperationDelete OperationType = "delete"
+	// OperationRevert откатывает N последующих мутаций в истории.
+	OperationRevert OperationType = "revert"
 )
 
 // Draft представляет собой черновик страницы, хранящий историю изменений.
@@ -27,9 +29,9 @@ type Draft struct {
 // Mutation описывает единичное изменение в структуре страницы.
 // @Description Объект мутации, применяемый к черновику.
 type Mutation struct {
-	// Operation тип операции: create, update или delete.
+	// Operation тип операции: create, update, delete или revert.
 	// Required: true
-	// Enum: [create, update, delete]
+	// Enum: [create, update, delete, revert]
 	Operation OperationType `json:"operation" example:"create"`
 
 	// Data полезные данные мутации. Структура зависит от типа операции.
