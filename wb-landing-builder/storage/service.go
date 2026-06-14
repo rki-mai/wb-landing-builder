@@ -107,15 +107,12 @@ func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, user
 		if !ok || mutationID == "" {
 			return 0, ErrInvalidMutation
 		}
-		latestMutation, err := s.repo.GetLatestMutationForID(ctx, projectID, mutationID)
+		effectiveMutation, err := s.getEffectiveElementMutation(ctx, projectID, mutationID)
 		if err != nil {
 			return 0, err
 		}
-		if latestMutation == nil {
-			return 0, ErrMutationNotFound
-		}
 		var okCopy bool
-		mutationToInsert, okCopy = deepcopy.Copy(latestMutation).(bson.M)
+		mutationToInsert, okCopy = deepcopy.Copy(effectiveMutation).(bson.M)
 		if !okCopy {
 			return 0, fmt.Errorf("mutation update failed: copy error")
 		}
@@ -179,6 +176,23 @@ func (s *DraftService) collapseMutations(ctx context.Context, projectID string, 
 	}
 	combined := append(draftMutations, *mutations...)
 	return dedupElementMutations(resolveMutations(combined)), nil
+}
+
+func (s *DraftService) getEffectiveElementMutation(ctx context.Context, projectID, elementID string) (bson.M, error) {
+	version, err := s.repo.GetLatestMutationVersion(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	elements, err := s.collapseMutations(ctx, projectID, version)
+	if err != nil {
+		return nil, err
+	}
+	for _, element := range elements {
+		if id, ok := element["id"].(string); ok && id == elementID {
+			return element, nil
+		}
+	}
+	return nil, ErrMutationNotFound
 }
 
 func revertCountFromData(data bson.M) (int, error) {

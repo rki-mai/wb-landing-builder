@@ -1,11 +1,85 @@
 package storage
 
 import (
+	"context"
+	"encoding/json"
 	"slices"
 	"testing"
 
+	"github.com/rki-mai/wb-landing-builder/config"
 	"go.mongodb.org/mongo-driver/bson"
 )
+
+type stubDraftRepo struct {
+	project   bson.M
+	mutations []bson.M
+	version   int
+}
+
+func (s *stubDraftRepo) GetDraft(_ context.Context, _ string, _ int) (bson.M, error) {
+	return bson.M{"version": int32(0), "mutations": bson.A{}}, nil
+}
+
+func (s *stubDraftRepo) InsertDraft(_ context.Context, _ string, _ string, _ []bson.M, _ int) error {
+	return nil
+}
+
+func (s *stubDraftRepo) GetLatestMutationForID(_ context.Context, _, _ string) (bson.M, error) {
+	return nil, nil
+}
+
+func (s *stubDraftRepo) GetLatestMutationVersion(_ context.Context, _ string) (int, error) {
+	return s.version, nil
+}
+
+func (s *stubDraftRepo) GetMutationsInRange(_ context.Context, _ string, from int, to int) (*[]bson.M, error) {
+	out := make([]bson.M, 0, len(s.mutations))
+	for _, mutation := range s.mutations {
+		version, ok := intFromBSON(mutation["version"])
+		if !ok {
+			continue
+		}
+		if version >= from && version <= to {
+			out = append(out, mutation)
+		}
+	}
+	return &out, nil
+}
+
+func (s *stubDraftRepo) InsertMutation(_ context.Context, projectID, ownerID string, mutation bson.M) (int, error) {
+	s.version++
+	inserted := make(bson.M, len(mutation)+3)
+	for key, value := range mutation {
+		inserted[key] = value
+	}
+	inserted["version"] = int32(s.version)
+	inserted["project_id"] = projectID
+	inserted["owner_id"] = ownerID
+	s.mutations = append(s.mutations, inserted)
+	return s.version, nil
+}
+
+func (s *stubDraftRepo) CreateProject(_ context.Context, _ string, _ string) error {
+	return nil
+}
+
+func (s *stubDraftRepo) GetProject(_ context.Context, _ string) (bson.M, error) {
+	return s.project, nil
+}
+
+func (s *stubDraftRepo) GetUserProjects(_ context.Context, _ string) ([]map[string]any, error) {
+	return nil, nil
+}
+
+func (s *stubDraftRepo) Close(_ context.Context) error {
+	return nil
+}
+
+func testDraftService(repo DraftRepository) DraftService {
+	return NewDraftService(repo, &config.Config{
+		DBConfig: config.DatabaseConfig{MaxConnections: 1},
+	})
+}
 
 func elementMutation(id string) bson.M {
 	return bson.M{
@@ -181,5 +255,95 @@ func TestRevertCountFromData(t *testing.T) {
 	_, err = revertCountFromData(bson.M{"count": float64(0)})
 	if err != ErrInvalidMutation {
 		t.Fatalf("expected ErrInvalidMutation, got %v", err)
+	}
+}
+
+func TestApplyMutationUpdateAfterRevert(t *testing.T) {
+	repo := &stubDraftRepo{project: bson.M{"owner_id": "user-1"}}
+	svc := testDraftService(repo)
+	ctx := context.Background()
+	const projectID = "project-1"
+	const userID = "user-1"
+
+	_, err := svc.ApplyMutation(ctx, projectID, userID, Mutation{
+		Operation: OperationCreate,
+		Data: bson.M{
+			"element":  "text",
+			"id":       "lb-2",
+			"parentId": "root",
+			"index":    0,
+			"value":    "A",
+			"styles":   bson.M{"color": "red"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	_, err = svc.ApplyMutation(ctx, projectID, userID, Mutation{
+		Operation: OperationUpdate,
+		Data: bson.M{
+			"id": "lb-2",
+			"fields": map[string]interface{}{
+				"value": "B",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	_, err = svc.ApplyMutation(ctx, projectID, userID, Mutation{
+		Operation: OperationRevert,
+		Data:      bson.M{"count": 1},
+	})
+	if err != nil {
+		t.Fatalf("revert: %v", err)
+	}
+
+	_, err = svc.ApplyMutation(ctx, projectID, userID, Mutation{
+		Operation: OperationUpdate,
+		Data: bson.M{
+			"id": "lb-2",
+			"fields": map[string]interface{}{
+				"styles": map[string]interface{}{
+					"fontSize": "12px",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("update after revert: %v", err)
+	}
+
+	raw, err := svc.GetLatestDraft(ctx, projectID, userID)
+	if err != nil {
+		t.Fatalf("get draft: %v", err)
+	}
+
+	var draft struct {
+		Elements []bson.M `json:"elements"`
+	}
+	if err := json.Unmarshal(raw, &draft); err != nil {
+		t.Fatalf("unmarshal draft: %v", err)
+	}
+	if len(draft.Elements) != 1 {
+		t.Fatalf("expected 1 element, got %d", len(draft.Elements))
+	}
+
+	element := draft.Elements[0]
+	if element["value"] != "A" {
+		t.Fatalf("expected reverted value A, got %v", element["value"])
+	}
+
+	styles, ok := element["styles"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected styles map, got %T", element["styles"])
+	}
+	if styles["color"] != "red" {
+		t.Fatalf("expected preserved color red, got %v", styles["color"])
+	}
+	if styles["fontSize"] != "12px" {
+		t.Fatalf("expected fontSize 12px, got %v", styles["fontSize"])
 	}
 }

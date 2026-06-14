@@ -15,7 +15,7 @@ const (
 	OperationUpdate OperationType = "update"
 	// OperationDelete удаляет элемент.
 	OperationDelete OperationType = "delete"
-	// OperationRevert откатывает N последующих мутаций в истории.
+	// OperationRevert откатывает N предшествующих мутаций в истории.
 	OperationRevert OperationType = "revert"
 )
 

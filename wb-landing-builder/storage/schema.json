@@ -400,7 +400,7 @@
                 "count": {
                     "type": "integer",
                     "minimum": 1,
-                    "description": "Number of following mutations to remove from effective history"
+                    "description": "Number of preceding mutations to remove from effective history"
                 }
             },
             "additionalProperties": false
