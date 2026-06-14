@@ -297,6 +297,7 @@ func (r *draftRepository) GetUserProjects(ctx context.Context, userID string) ([
 		{{Key: "$project", Value: bson.M{
 			"_id":        0,
 			"id":         "$project_id",
+			"name":       "$name",
 			"created_at": "$created_at",
 		}}},
 	}

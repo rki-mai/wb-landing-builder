@@ -210,7 +210,9 @@ func (h *DraftHandler) getUserProjects(w http.ResponseWriter, r *http.Request) {
 // @Accept json
 // @Security BearerAuth
 // @Produce json
+// @Param request body CreateProjectRequest true "Имя проекта"
 // @Success 201 {object} map[string]string "ID созданного проекта"
+// @Failure 400 {object} ErrorResponse "Ошибка валидации или неверный запрос"
 // @Failure 401 {object} ErrorResponse "Пользователь не авторизован"
 // @Failure 409 {object} ErrorResponse "Проект уже существует"
 // @Failure 500 {object} ErrorResponse "Ошибка создания проекта"
@@ -300,7 +302,7 @@ func (h *DraftHandler) updateProjectName(w http.ResponseWriter, r *http.Request)
 			httputil.WriteJSONError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to create project: "+err.Error())
+		httputil.WriteJSONError(w, http.StatusInternalServerError, "failed to update project name: "+err.Error())
 		return
 	}
 
