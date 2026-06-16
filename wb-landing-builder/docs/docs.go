@@ -264,6 +264,17 @@ const docTemplate = `{
                     "Storage"
                 ],
                 "summary": "Создать проект",
+                "parameters": [
+                    {
+                        "description": "Имя проекта",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/storage.CreateProjectRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "201": {
                         "description": "ID созданного проекта",
@@ -272,6 +283,12 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    },
+                    "400": {
+                        "description": "Ошибка валидации или неверный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
                         }
                     },
                     "401": {
@@ -288,6 +305,85 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Ошибка создания проекта",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/projects/{project_id}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Обновляет человекочитаемое имя существующего проекта.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Storage"
+                ],
+                "summary": "Изменить имя проекта",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID проекта",
+                        "name": "project_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Новое имя проекта",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/storage.UpdateProjectNameRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Имя проекта успешно обновлено",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Ошибка валидации или неверный запрос",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Пользователь не авторизован",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Доступ запрещен",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Проект не найден",
+                        "schema": {
+                            "$ref": "#/definitions/storage.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка сервера",
                         "schema": {
                             "$ref": "#/definitions/storage.ErrorResponse"
                         }
@@ -874,6 +970,9 @@ const docTemplate = `{
                 "project_id": {
                     "type": "string"
                 },
+                "public_url": {
+                    "type": "string"
+                },
                 "status": {
                     "$ref": "#/definitions/publishing.PublicationStatus"
                 },
@@ -910,6 +1009,14 @@ const docTemplate = `{
                 "StatusFinished",
                 "StatusFailed"
             ]
+        },
+        "storage.CreateProjectRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
         },
         "storage.ErrorResponse": {
             "type": "object",
@@ -953,6 +1060,14 @@ const docTemplate = `{
                 "OperationUpdate",
                 "OperationDelete"
             ]
+        },
+        "storage.UpdateProjectNameRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
         }
     },
     "securityDefinitions": {
