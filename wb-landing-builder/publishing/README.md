@@ -11,7 +11,7 @@
 
 Создание публикации **асинхронное**: HTTP-ручка быстро создаёт запись со статусом `PENDING` и ставит задачу в RabbitMQ; worker в том же процессе выполняет рендер и загрузку в S3, обновляя статус до `FINISHED` или `FAILED`. Клиент опрашивает `GET …/publications/{id}` до завершения.
 
-Сейчас сборка упрощена (задача #18): в bundle кладётся `index.html` (рендер через [landing-builder-cli](https://github.com/rki-mai/landing-builder-cli)). Полноценная сборка CSS/JS/медиа — в отдельной задаче; интерфейс `BlobStorage` уже рассчитан на несколько файлов в bundle.
+Сборка выполняется через [landing-builder-cli v2](https://github.com/rki-mai/landing-builder-cli) (Go + Astro): в bundle попадают `index.html` и сгенерированные ассеты (CSS, JS и др.). Интерфейс `BlobStorage` загружает все файлы из output-директории CLI.
 
 ## Структура пакета
 
@@ -26,7 +26,7 @@ publishing/
 └── utils/
     ├── blobstorage.go    # интерфейс BlobStorage
     ├── s3_blobstorage.go # реализация S3 / MinIO
-    ├── renderer.go       # рендер JSON → HTML (CLI)
+    ├── renderer.go       # рендер JSON → bundle (landing-builder-cli build)
     ├── draft.go          # снимок Draft (парсинг BSON/JSON)
     ├── draft_reader.go   # чтение черновика из storage
     ├── queue.go          # интерфейсы Publisher/Consumer
@@ -175,7 +175,7 @@ make up
 3. **Authorize** → `Bearer <access_token>`
 4. **Storage** — собрать черновик для `demo-project` (см. ниже)
 5. **Publications** → `POST /api/v1/storage/demo-project/publications`
-6. В MinIO Console (http://localhost:9001, `minioadmin` / `minioadmin`) в bucket `publications` должен появиться `index.html`
+6. В MinIO Console (http://localhost:9001, `minioadmin` / `minioadmin`) в bucket `publications` должны появиться `index.html` и связанные ассеты
 
 #### Черновик в Storage (как `storage-sample.json`)
 
@@ -311,7 +311,7 @@ make up
 | `S3_BUCKET` | Имя bucket | `publications` |
 | `S3_ACCESS_KEY` / `S3_SECRET_KEY` | Учётные данные | `minioadmin` |
 | `S3_USE_PATH_STYLE` | Path-style для MinIO | `true` |
-| `PUBLISHING_CLI_PATH` | Путь к `generate.py` | `/app/cli/generate.py` |
+| `PUBLISHING_CLI_PATH` | Путь к бинарнику `landing-builder-cli` | `/app/cli/landing-builder-cli` |
 | `RABBITMQ_URL` | URL брокера | `amqp://guest:guest@rabbitmq:5672/` |
 | `RABBITMQ_PUBLISH_QUEUE` | Очередь задач на рендер | `publish.requests` |
 | `PUBLIC_BASE_URL` | Базовый URL для `public_url` в ответах API | `http://localhost:8080` |

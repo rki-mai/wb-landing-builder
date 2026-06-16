@@ -309,7 +309,7 @@ main() {
   log_ok "access_token received"
 
   log "Create project"
-  PROJECT_ID="$(json_post '/api/v1/projects' '{}' 201 "$token" | jq -r '.project_id')"
+  PROJECT_ID="$(json_post '/api/v1/projects' '{"name":"Smoke test project"}' 201 "$token" | jq -r '.project_id')"
   [[ -n "$PROJECT_ID" && "$PROJECT_ID" != "null" ]] || fail "Empty project_id"
   log_ok "project_id=${PROJECT_ID}"
 

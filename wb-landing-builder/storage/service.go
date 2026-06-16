@@ -317,7 +317,7 @@ func (s *DraftService) GetLatestDraft(ctx context.Context, projectID string, use
 	return s.GetDraft(ctx, projectID, userID, math.MaxInt)
 }
 
-func (s *DraftService) CreateProject(ctx context.Context, projectID string, ownerID string) error {
+func (s *DraftService) CreateProject(ctx context.Context, projectID string, ownerID string, name string) error {
 	s.semaphore <- struct{}{}
 	defer func() { <-s.semaphore }()
 
@@ -330,7 +330,14 @@ func (s *DraftService) CreateProject(ctx context.Context, projectID string, owne
 		return ErrProjectAlreadyExists
 	}
 
-	return s.repo.CreateProject(ctx, projectID, ownerID)
+	return s.repo.CreateProject(ctx, projectID, ownerID, name)
+}
+
+func (s *DraftService) UpdateProjectName(ctx context.Context, projectID string, userID string, name string) error {
+	if err := s.CheckOwnership(ctx, projectID, userID); err != nil {
+		return err
+	}
+	return s.repo.UpdateProjectName(ctx, projectID, name)
 }
 
 func (s *DraftService) GetProject(ctx context.Context, projectID string) (bson.M, error) {

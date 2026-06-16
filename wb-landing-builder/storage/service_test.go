@@ -59,7 +59,11 @@ func (s *stubDraftRepo) InsertMutation(_ context.Context, projectID, ownerID str
 	return s.version, nil
 }
 
-func (s *stubDraftRepo) CreateProject(_ context.Context, _ string, _ string) error {
+func (s *stubDraftRepo) CreateProject(_ context.Context, _ string, _ string, _ string) error {
+	return nil
+}
+
+func (s *stubDraftRepo) UpdateProjectName(_ context.Context, _ string, _ string) error {
 	return nil
 }
 

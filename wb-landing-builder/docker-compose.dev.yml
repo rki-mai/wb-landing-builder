@@ -115,7 +115,7 @@ services:
       - S3_SECRET_KEY=minioadmin
       - S3_BUCKET=publications
       - S3_USE_PATH_STYLE=true
-      - PUBLISHING_CLI_PATH=/app/cli/generate.py
+      - PUBLISHING_CLI_PATH=/app/cli/landing-builder-cli
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
       - RABBITMQ_PUBLISH_QUEUE=publish.requests
     depends_on:

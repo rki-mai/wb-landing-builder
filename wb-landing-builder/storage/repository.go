@@ -20,7 +20,8 @@ type DraftRepository interface {
 	GetMutationsInRange(ctx context.Context, projectID string, from int, to int) (*[]bson.M, error)
 	InsertMutation(ctx context.Context, projectID string, ownerID string, mutation bson.M) (int, error)
 
-	CreateProject(ctx context.Context, projectID string, ownerID string) error
+	CreateProject(ctx context.Context, projectID string, ownerID string, name string) error
+	UpdateProjectName(ctx context.Context, projectID string, name string) error
 	GetProject(ctx context.Context, projectID string) (bson.M, error)
 	GetUserProjects(ctx context.Context, userID string) ([]map[string]any, error)
 
@@ -239,16 +240,37 @@ func (r *draftRepository) InsertMutation(ctx context.Context, projectID string, 
 	return latestVersion + 1, nil
 }
 
-func (r *draftRepository) CreateProject(ctx context.Context, projectID string, ownerID string) error {
+func (r *draftRepository) CreateProject(ctx context.Context, projectID string, ownerID string, name string) error {
 	project := bson.M{
 		"project_id": projectID,
 		"owner_id":   ownerID,
+		"name":       name,
 		"created_at": time.Now(),
 	}
 
 	_, err := r.projectsCollection.InsertOne(ctx, project)
 	if err != nil {
 		return fmt.Errorf("insert project error: %w", err)
+	}
+
+	return nil
+}
+
+func (r *draftRepository) UpdateProjectName(ctx context.Context, projectID string, name string) error {
+	_, err := r.projectsCollection.UpdateOne(
+		ctx,
+		bson.M{
+			"project_id": projectID,
+		},
+		bson.M{
+			"$set": bson.M{
+				"name": name,
+			},
+		},
+	)
+
+	if err != nil {
+		return fmt.Errorf("update project name error: %w", err)
 	}
 
 	return nil
@@ -275,6 +297,7 @@ func (r *draftRepository) GetUserProjects(ctx context.Context, userID string) ([
 		{{Key: "$project", Value: bson.M{
 			"_id":        0,
 			"id":         "$project_id",
+			"name":       "$name",
 			"created_at": "$created_at",
 		}}},
 	}

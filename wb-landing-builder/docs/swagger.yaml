@@ -118,6 +118,11 @@ definitions:
     - StatusProcessing
     - StatusFinished
     - StatusFailed
+  storage.CreateProjectRequest:
+    properties:
+      name:
+        type: string
+    type: object
   storage.ErrorResponse:
     properties:
       error:
@@ -157,6 +162,11 @@ definitions:
     - OperationUpdate
     - OperationDelete
     - OperationRevert
+  storage.UpdateProjectNameRequest:
+    properties:
+      name:
+        type: string
+    type: object
 host: localhost:8080
 info:
   contact:
@@ -321,6 +331,13 @@ paths:
       - application/json
       description: Создает новый проект и назначает владельцем текущего авторизованного
         пользователя.
+      parameters:
+      - description: Имя проекта
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/storage.CreateProjectRequest'
       produces:
       - application/json
       responses:
@@ -330,6 +347,10 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "400":
+          description: Ошибка валидации или неверный запрос
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
         "401":
           description: Пользователь не авторизован
           schema:
@@ -345,6 +366,57 @@ paths:
       security:
       - BearerAuth: []
       summary: Создать проект
+      tags:
+      - Storage
+  /api/v1/projects/{project_id}:
+    patch:
+      consumes:
+      - application/json
+      description: Обновляет человекочитаемое имя существующего проекта.
+      parameters:
+      - description: ID проекта
+        in: path
+        name: project_id
+        required: true
+        type: string
+      - description: Новое имя проекта
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/storage.UpdateProjectNameRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Имя проекта успешно обновлено
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Ошибка валидации или неверный запрос
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "401":
+          description: Пользователь не авторизован
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "403":
+          description: Доступ запрещен
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "404":
+          description: Проект не найден
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          schema:
+            $ref: '#/definitions/storage.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Изменить имя проекта
       tags:
       - Storage
   /api/v1/projects/{project_id}/draft:

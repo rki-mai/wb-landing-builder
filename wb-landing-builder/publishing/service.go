@@ -123,16 +123,12 @@ func (s *PublicationService) renderAndUpload(
 		return fmt.Errorf("failed to encode draft: %w", err)
 	}
 
-	html, err := s.render.Render(ctx, draftJSON)
+	blobs, err := s.render.Render(ctx, draftJSON)
 	if err != nil {
 		return fmt.Errorf("failed to render draft: %w", err)
 	}
 
 	bundleKey := "publications/" + publicationID
-	blobs := []utils.Blob{
-		{Path: "index.html", Content: html, ContentType: "text/html; charset=utf-8"},
-	}
-
 	if err := s.blob.PutBundle(ctx, bundleKey, blobs); err != nil {
 		return fmt.Errorf("failed to upload bundle: %w", err)
 	}
