@@ -294,7 +294,10 @@ func (s *DraftService) GetDraft(ctx context.Context, projectID string, userID st
 	}
 	actualVersion := version
 	if version == math.MaxInt {
-		actualVersion = getMaxVersion(elements)
+		actualVersion, err = s.repo.GetLatestMutationVersion(ctx, projectID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	response := struct {
 		Version  int      `json:"version"`
@@ -335,19 +338,6 @@ func (s *DraftService) GetProject(ctx context.Context, projectID string) (bson.M
 	defer func() { <-s.semaphore }()
 
 	return s.repo.GetProject(ctx, projectID)
-}
-
-func getMaxVersion(elements []bson.M) int {
-	if len(elements) == 0 {
-		return 0
-	}
-	maxV := elements[0]["version"].(int32)
-	for _, e := range elements[1:] {
-		if e["version"].(int32) > maxV {
-			maxV = e["version"].(int32)
-		}
-	}
-	return int(maxV)
 }
 
 func (s *DraftService) GetUserProjects(ctx context.Context, userID string) ([]map[string]any, error) {

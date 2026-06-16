@@ -258,6 +258,55 @@ func TestRevertCountFromData(t *testing.T) {
 	}
 }
 
+func TestGetLatestDraftVersionAfterRevert(t *testing.T) {
+	repo := &stubDraftRepo{project: bson.M{"owner_id": "user-1"}}
+	svc := testDraftService(repo)
+	ctx := context.Background()
+	const projectID = "project-1"
+	const userID = "user-1"
+
+	_, err := svc.ApplyMutation(ctx, projectID, userID, Mutation{
+		Operation: OperationCreate,
+		Data: bson.M{
+			"element":  "text",
+			"id":       "lb-2",
+			"parentId": "root",
+			"index":    0,
+			"value":    "Hello",
+		},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	revertVersion, err := svc.ApplyMutation(ctx, projectID, userID, Mutation{
+		Operation: OperationRevert,
+		Data:      bson.M{"count": 1},
+	})
+	if err != nil {
+		t.Fatalf("revert: %v", err)
+	}
+
+	raw, err := svc.GetLatestDraft(ctx, projectID, userID)
+	if err != nil {
+		t.Fatalf("get draft: %v", err)
+	}
+
+	var draft struct {
+		Version  int      `json:"version"`
+		Elements []bson.M `json:"elements"`
+	}
+	if err := json.Unmarshal(raw, &draft); err != nil {
+		t.Fatalf("unmarshal draft: %v", err)
+	}
+	if draft.Version != revertVersion {
+		t.Fatalf("expected draft version %d, got %d", revertVersion, draft.Version)
+	}
+	if len(draft.Elements) != 0 {
+		t.Fatalf("expected empty elements after revert, got %d", len(draft.Elements))
+	}
+}
+
 func TestApplyMutationUpdateAfterRevert(t *testing.T) {
 	repo := &stubDraftRepo{project: bson.M{"owner_id": "user-1"}}
 	svc := testDraftService(repo)
