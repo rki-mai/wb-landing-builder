@@ -112,7 +112,7 @@ func Load() *Config {
 			UsePathStyle: s3UsePathStyle,
 		},
 		Publishing: PublishingConfig{
-			CLIPath: getEnv("PUBLISHING_CLI_PATH", "/app/cli/generate.py"),
+			CLIPath: getEnv("PUBLISHING_CLI_PATH", "/app/cli/landing-builder-cli"),
 		},
 		RabbitMQ: RabbitMQConfig{
 			URL:   getEnv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/"),

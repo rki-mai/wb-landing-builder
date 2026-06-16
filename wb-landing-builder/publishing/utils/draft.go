@@ -19,9 +19,17 @@ func ParseDraftSnapshot(data []byte) (*Draft, error) {
 	return parseDraftSnapshot(data)
 }
 
-// JSON возвращает снимок в JSON для CLI-рендера.
+// JSON возвращает снимок в JSON для CLI-рендера ({ "elements": [...] }).
 func (d *Draft) JSON() ([]byte, error) {
-	return json.Marshal(d.elements)
+	payload := struct {
+		Elements []bson.M `json:"elements"`
+	}{
+		Elements: d.elements,
+	}
+	if payload.Elements == nil {
+		payload.Elements = []bson.M{}
+	}
+	return json.Marshal(payload)
 }
 
 func parseDraftSnapshot(data []byte) (*Draft, error) {
