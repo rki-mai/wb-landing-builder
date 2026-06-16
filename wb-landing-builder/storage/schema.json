@@ -1,7 +1,7 @@
 {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "title": "Element Operations Schema",
-    "description": "Schema for validating element operations (create, update, delete) and element structures",
+    "description": "Schema for validating element operations (create, update, delete, revert) and element structures",
     "definitions": {
         "styles": {
             "type": "object",
@@ -390,6 +390,20 @@
                 }
             },
             "additionalProperties": false
+        },
+        "revertData": {
+            "type": "object",
+            "required": [
+                "count"
+            ],
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Number of preceding mutations to remove from effective history"
+                }
+            },
+            "additionalProperties": false
         }
     },
     "type": "object",
@@ -403,7 +417,8 @@
             "enum": [
                 "create",
                 "update",
-                "delete"
+                "delete",
+                "revert"
             ],
             "description": "Operation type to perform"
         },
@@ -458,6 +473,22 @@
                 "properties": {
                     "data": {
                         "$ref": "#/definitions/deleteData"
+                    }
+                }
+            }
+        },
+        {
+            "if": {
+                "properties": {
+                    "operation": {
+                        "const": "revert"
+                    }
+                }
+            },
+            "then": {
+                "properties": {
+                    "data": {
+                        "$ref": "#/definitions/revertData"
                     }
                 }
             }

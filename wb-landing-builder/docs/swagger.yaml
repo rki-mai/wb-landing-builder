@@ -145,9 +145,9 @@ definitions:
         allOf:
         - $ref: '#/definitions/storage.OperationType'
         description: |-
-          Operation тип операции: create, update или delete.
+          Operation тип операции: create, update, delete или revert.
           Required: true
-          Enum: [create, update, delete]
+          Enum: [create, update, delete, revert]
         example: create
     type: object
   storage.OperationType:
@@ -155,11 +155,13 @@ definitions:
     - create
     - update
     - delete
+    - revert
     type: string
     x-enum-varnames:
     - OperationCreate
     - OperationUpdate
     - OperationDelete
+    - OperationRevert
   storage.UpdateProjectNameRequest:
     properties:
       name:
@@ -464,8 +466,8 @@ paths:
     post:
       consumes:
       - application/json
-      description: Применяет JSON-мутацию к указанному проекту после проверки схемы
-        и лимитов.
+      description: Применяет JSON-мутацию (create, update, delete или revert) к указанному
+        проекту после проверки схемы и лимитов.
       parameters:
       - description: ID проекта
         in: path

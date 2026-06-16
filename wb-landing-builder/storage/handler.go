@@ -311,7 +311,7 @@ func (h *DraftHandler) updateProjectName(w http.ResponseWriter, r *http.Request)
 
 // ApplyMutation применяет мутацию к черновику страницы проекта.
 // @Summary Применить мутацию
-// @Description Применяет JSON-мутацию к указанному проекту после проверки схемы и лимитов.
+// @Description Применяет JSON-мутацию (create, update, delete или revert) к указанному проекту после проверки схемы и лимитов.
 // @Tags Storage
 // @Accept json
 // @Security BearerAuth

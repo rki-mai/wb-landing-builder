@@ -1,0 +1,9 @@
+{
+  "operation": "update",
+  "data": {
+    "id": "lb-2",
+    "fields": {
+      "value": "Updated heading"
+    }
+  }
+}

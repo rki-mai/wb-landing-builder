@@ -90,22 +90,30 @@ func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, user
 	if err := s.CheckOwnership(ctx, projectID, userID); err != nil {
 		return 0, err
 	}
-	mutationToInsert := mutation.Data
-	mutationToInsert["deleted"] = mutation.Operation == OperationDelete
-	if mutation.Operation == OperationUpdate {
+
+	var mutationToInsert bson.M
+	switch mutation.Operation {
+	case OperationRevert:
+		count, err := revertCountFromData(mutation.Data)
+		if err != nil {
+			return 0, err
+		}
+		mutationToInsert = bson.M{"revert": count}
+	case OperationDelete:
+		mutationToInsert = mutation.Data
+		mutationToInsert["deleted"] = true
+	case OperationUpdate:
 		mutationID, ok := mutation.Data["id"].(string)
 		if !ok || mutationID == "" {
 			return 0, ErrInvalidMutation
 		}
-		latestMutation, err := s.repo.GetLatestMutationForID(ctx, projectID, mutationID)
+		effectiveMutation, err := s.getEffectiveElementMutation(ctx, projectID, mutationID)
 		if err != nil {
 			return 0, err
 		}
-		if latestMutation == nil {
-			return 0, ErrMutationNotFound
-		}
-		mutationToInsert, ok = deepcopy.Copy(latestMutation).(bson.M)
-		if !ok {
+		var okCopy bool
+		mutationToInsert, okCopy = deepcopy.Copy(effectiveMutation).(bson.M)
+		if !okCopy {
 			return 0, fmt.Errorf("mutation update failed: copy error")
 		}
 		delete(mutationToInsert, "_id")
@@ -115,7 +123,12 @@ func (s *DraftService) ApplyMutation(ctx context.Context, projectID string, user
 		}
 		fieldsBson := bson.M(fields)
 		s.mergeBSON(mutationToInsert, fieldsBson)
+		mutationToInsert["deleted"] = false
+	default:
+		mutationToInsert = mutation.Data
+		mutationToInsert["deleted"] = false
 	}
+
 	version, err := s.repo.InsertMutation(ctx, projectID, userID, mutationToInsert)
 	if err != nil {
 		return 0, err
@@ -161,13 +174,104 @@ func (s *DraftService) collapseMutations(ctx context.Context, projectID string, 
 	if err != nil {
 		return nil, err
 	}
-	seenIDs := make(map[string]bool)
-	uniqueMutations := make([]bson.M, 0)
 	combined := append(draftMutations, *mutations...)
+	return dedupElementMutations(resolveMutations(combined)), nil
+}
+
+func (s *DraftService) getEffectiveElementMutation(ctx context.Context, projectID, elementID string) (bson.M, error) {
+	version, err := s.repo.GetLatestMutationVersion(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	elements, err := s.collapseMutations(ctx, projectID, version)
+	if err != nil {
+		return nil, err
+	}
+	for _, element := range elements {
+		if id, ok := element["id"].(string); ok && id == elementID {
+			return element, nil
+		}
+	}
+	return nil, ErrMutationNotFound
+}
+
+func revertCountFromData(data bson.M) (int, error) {
+	if data == nil {
+		return 0, ErrInvalidMutation
+	}
+	count, ok := intFromBSON(data["count"])
+	if !ok || count < 1 {
+		return 0, ErrInvalidMutation
+	}
+	return count, nil
+}
+
+func intFromBSON(value interface{}) (int, bool) {
+	switch v := value.(type) {
+	case int:
+		return v, true
+	case int32:
+		return int(v), true
+	case int64:
+		return int(v), true
+	case float64:
+		return int(v), true
+	default:
+		return 0, false
+	}
+}
+
+func isRevertMutation(mutation bson.M) bool {
+	count, ok := intFromBSON(mutation["revert"])
+	return ok && count > 0
+}
+
+func isElementMutation(mutation bson.M) bool {
+	id, ok := mutation["id"].(string)
+	return ok && id != ""
+}
+
+// resolveMutations восстанавливает эффективную историю (issue #52).
+// combined — мутации в порядке версий (v1, v2, …). Collapse идёт от vn к v1;
+// revert(N) на версии i отменяет N предшествующих записей (i-1, i-2, …).
+func resolveMutations(combined []bson.M) []bson.M {
+	active := make([]bool, len(combined))
+	for i := range active {
+		active[i] = true
+	}
+
 	for i := len(combined) - 1; i >= 0; i-- {
-		mutation := combined[i]
+		if !active[i] || !isRevertMutation(combined[i]) {
+			continue
+		}
+		revertN, _ := intFromBSON(combined[i]["revert"])
+		for j := i - 1; j >= 0 && revertN > 0; j-- {
+			if !active[j] {
+				continue
+			}
+			active[j] = false
+			revertN--
+		}
+		active[i] = false
+	}
+
+	survivors := make([]bson.M, 0, len(combined))
+	for i, mutation := range combined {
+		if active[i] && isElementMutation(mutation) {
+			survivors = append(survivors, mutation)
+		}
+	}
+	return survivors
+}
+
+func dedupElementMutations(mutations []bson.M) []bson.M {
+	seenIDs := make(map[string]bool)
+	uniqueMutations := make([]bson.M, 0, len(mutations))
+	for i := len(mutations) - 1; i >= 0; i-- {
+		mutation := mutations[i]
 		id := mutation["id"].(string)
-		if mutation["deleted"].(bool) {
+		deleted, _ := mutation["deleted"].(bool)
+		if deleted {
 			seenIDs[id] = true
 		}
 		if !seenIDs[id] {
@@ -175,7 +279,7 @@ func (s *DraftService) collapseMutations(ctx context.Context, projectID string, 
 			uniqueMutations = append(uniqueMutations, mutation)
 		}
 	}
-	return uniqueMutations, nil
+	return uniqueMutations
 }
 
 func (s *DraftService) GetDraft(ctx context.Context, projectID string, userID string, version int) ([]byte, error) {
@@ -190,7 +294,10 @@ func (s *DraftService) GetDraft(ctx context.Context, projectID string, userID st
 	}
 	actualVersion := version
 	if version == math.MaxInt {
-		actualVersion = getMaxVersion(elements)
+		actualVersion, err = s.repo.GetLatestMutationVersion(ctx, projectID)
+		if err != nil {
+			return nil, err
+		}
 	}
 	response := struct {
 		Version  int      `json:"version"`
@@ -238,19 +345,6 @@ func (s *DraftService) GetProject(ctx context.Context, projectID string) (bson.M
 	defer func() { <-s.semaphore }()
 
 	return s.repo.GetProject(ctx, projectID)
-}
-
-func getMaxVersion(elements []bson.M) int {
-	if len(elements) == 0 {
-		return 0
-	}
-	maxV := elements[0]["version"].(int32)
-	for _, e := range elements[1:] {
-		if e["version"].(int32) > maxV {
-			maxV = e["version"].(int32)
-		}
-	}
-	return int(maxV)
 }
 
 func (s *DraftService) GetUserProjects(ctx context.Context, userID string) ([]map[string]any, error) {

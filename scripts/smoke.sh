@@ -316,7 +316,7 @@ main() {
   log "Apply sample draft mutations to project ${PROJECT_ID}"
   local mutation_file payload version
   version=0
-  for mutation_file in "${FIXTURES_DIR}"/*.json; do
+  for mutation_file in "${FIXTURES_DIR}"/0{1,2,3,4,5,6}-*.json; do
     payload="$(cat "$mutation_file")"
     version="$(json_post "/api/v1/projects/${PROJECT_ID}/draft/mutations" \
       "$payload" 200 "$token" | jq -r '.version')"
@@ -325,12 +325,48 @@ main() {
   log_ok "6 mutations applied, latest version=${version}"
 
   log "Read draft snapshot"
-  local draft elements_count
+  local draft elements_count heading_value
   draft="$(json_get "/api/v1/projects/${PROJECT_ID}/draft" 200 "$token")"
   elements_count="$(echo "$draft" | jq '.elements | length')"
   [[ "$elements_count" -eq 6 ]] || fail "Expected 6 elements, got ${elements_count}"
+  heading_value="$(echo "$draft" | jq -r '.elements[] | select(.id == "lb-2") | .value')"
+  [[ "$heading_value" == "Привет, Мир!" ]] || fail "Expected original heading, got ${heading_value}"
   log_ok "$(echo "$draft" | jq -r '[.version, (.elements | length), ([.elements[].id] | join(", "))] | "version=\(.[0]), elements=\(.[1]), ids=\(.[2])"')"
   maybe_verbose "$draft"
+
+  log "Apply update mutation and verify draft changed"
+  payload="$(cat "${FIXTURES_DIR}/07-update-heading.json")"
+  version="$(json_post "/api/v1/projects/${PROJECT_ID}/draft/mutations" \
+    "$payload" 200 "$token" | jq -r '.version')"
+  draft="$(json_get "/api/v1/projects/${PROJECT_ID}/draft" 200 "$token")"
+  heading_value="$(echo "$draft" | jq -r '.elements[] | select(.id == "lb-2") | .value')"
+  [[ "$heading_value" == "Updated heading" ]] || fail "Expected updated heading, got ${heading_value}"
+  log_ok "update applied, version=${version}, heading=${heading_value}"
+
+  log "Revert last mutation and verify heading restored"
+  payload="$(cat "${FIXTURES_DIR}/09-revert-1.json")"
+  version="$(json_post "/api/v1/projects/${PROJECT_ID}/draft/mutations" \
+    "$payload" 200 "$token" | jq -r '.version')"
+  draft="$(json_get "/api/v1/projects/${PROJECT_ID}/draft" 200 "$token")"
+  heading_value="$(echo "$draft" | jq -r '.elements[] | select(.id == "lb-2") | .value')"
+  [[ "$heading_value" == "Привет, Мир!" ]] || fail "Expected reverted heading, got ${heading_value}"
+  log_ok "revert applied, version=${version}, heading=${heading_value}"
+
+  log "Delete element, revert deletion and verify element count"
+  payload="$(cat "${FIXTURES_DIR}/08-delete-button.json")"
+  json_post "/api/v1/projects/${PROJECT_ID}/draft/mutations" \
+    "$payload" 200 "$token" >/dev/null
+  draft="$(json_get "/api/v1/projects/${PROJECT_ID}/draft" 200 "$token")"
+  elements_count="$(echo "$draft" | jq '.elements | length')"
+  [[ "$elements_count" -eq 5 ]] || fail "Expected 5 elements after delete, got ${elements_count}"
+
+  payload="$(cat "${FIXTURES_DIR}/09-revert-1.json")"
+  json_post "/api/v1/projects/${PROJECT_ID}/draft/mutations" \
+    "$payload" 200 "$token" >/dev/null
+  draft="$(json_get "/api/v1/projects/${PROJECT_ID}/draft" 200 "$token")"
+  elements_count="$(echo "$draft" | jq '.elements | length')"
+  [[ "$elements_count" -eq 6 ]] || fail "Expected 6 elements after revert delete, got ${elements_count}"
+  log_ok "delete reverted, elements=${elements_count}"
 
   log "Create publication"
   local publication publication_id publication_status
