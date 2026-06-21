@@ -134,6 +134,7 @@ services:
 
   landing-editor:
     image: ghcr.io/rki-mai/landing-editor:0.4.0
+    platform: linux/amd64
     container_name: landing-editor
     restart: always
     networks:
