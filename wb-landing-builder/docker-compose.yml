@@ -132,6 +132,19 @@ services:
       retries: 5
       start_period: 30s
 
+  landing-editor:
+    image: ghcr.io/rki-mai/landing-editor:0.4.0
+    container_name: landing-editor
+    restart: always
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
   cdn:
     image: nginx:alpine
     container_name: landing-cdn
@@ -140,12 +153,13 @@ services:
       - "8080:80"
     volumes:
       - ./docker/cdn/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./docker/static:/usr/share/nginx/static:ro
       - cdn-cache:/var/cache/nginx/publications
     depends_on:
       wb-landing-builder:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      landing-editor:
         condition: service_healthy
     networks:
       - app-network
